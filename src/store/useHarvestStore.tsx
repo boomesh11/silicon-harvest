@@ -46,7 +46,13 @@ import {
   supabaseVerifyPhoneOtp,
   supabaseCreateSupportTicket,
   supabaseFetchSupportTickets,
+  quickGoogleProfileSignIn,
+  restoreSupabaseAuthSession,
+  supabaseUpdateProfile,
 } from '../services/harvestApi';
+
+/** Persisted signed-in customer session (restored on reload). */
+const USER_SESSION_KEY = 'silicon_harvest_user_session';
 
 const STORAGE_KEYS = {
   BOARDS: 'silicon_harvest_prod_v2_boards',
@@ -133,9 +139,15 @@ interface HarvestStoreContextValue {
     district?: string,
     pincode?: string
   ) => Promise<{ error: string | null }>;
-  sendPhoneOtp: (phone: string) => Promise<{ error: string | null }>;
-  verifyPhoneOtp: (phone: string, token: string) => Promise<{ error: string | null }>;
+  sendPhoneOtp: (phone: string) => Promise<{ error: string | null; onScreenCode?: string }>;
+  verifyPhoneOtp: (
+    phone: string,
+    token: string,
+    fullName?: string
+  ) => Promise<{ error: string | null }>;
   signInWithGoogle: () => Promise<{ error: string | null }>;
+  quickGoogleSignIn: (email: string, fullName: string) => Promise<{ error: string | null }>;
+  isSignedIn: boolean;
   signOut: () => void;
   connectionMode: ConnectionMode;
   isSyncing: boolean;
@@ -203,8 +215,12 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     loadFromStorage(STORAGE_KEYS.TICKETS, [])
   );
   const [currentUser, setCurrentUser] = useState<UserProfile>(() =>
-    loadFromStorage(STORAGE_KEYS.USER, DEFAULT_GUEST_PROFILE)
+    loadFromStorage(
+      USER_SESSION_KEY,
+      loadFromStorage(STORAGE_KEYS.USER, DEFAULT_GUEST_PROFILE)
+    )
   );
+  const isSignedIn = currentUser.id !== DEFAULT_GUEST_PROFILE.id && !!currentUser.email;
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('MARKETPLACE');
   const [connectionMode, setConnectionMode] = useState<ConnectionMode>(() =>
@@ -271,10 +287,30 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(currentUser));
+      if (currentUser.id !== DEFAULT_GUEST_PROFILE.id && currentUser.email) {
+        localStorage.setItem(USER_SESSION_KEY, JSON.stringify(currentUser));
+      } else {
+        localStorage.removeItem(USER_SESSION_KEY);
+      }
     } catch {
       // ignore
     }
   }, [currentUser]);
+
+  // Restore a real Supabase OAuth / email session (e.g. after Google redirect)
+  useEffect(() => {
+    let cancelled = false;
+    restoreSupabaseAuthSession()
+      .then((profile) => {
+        if (!cancelled && profile) setCurrentUser(profile);
+      })
+      .catch(() => {
+        // ignore — local session (if any) remains active
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Cross-tab BroadcastChannel sync
   const broadcastLocalStateUpdate = useCallback(() => {
@@ -413,6 +449,9 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   const updateUserProfile = (updates: Partial<UserProfile>) => {
     setCurrentUser((prev) => {
       const updated = { ...prev, ...updates };
+      if (updated.id !== DEFAULT_GUEST_PROFILE.id && updated.email) {
+        supabaseUpdateProfile(updated).catch(() => undefined);
+      }
       return updated;
     });
   };
@@ -459,8 +498,8 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     return supabaseSendPhoneOtp(phone);
   };
 
-  const verifyPhoneOtp = async (phone: string, token: string) => {
-    const { profile, error } = await supabaseVerifyPhoneOtp(phone, token);
+  const verifyPhoneOtp = async (phone: string, token: string, fullName = '') => {
+    const { profile, error } = await supabaseVerifyPhoneOtp(phone, token, fullName);
     if (profile) {
       setCurrentUser(profile);
     }
@@ -471,9 +510,20 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     return supabaseSignInWithGoogle();
   };
 
+  const quickGoogleSignIn = async (email: string, fullName: string) => {
+    const { profile, error } = await quickGoogleProfileSignIn(email, fullName);
+    if (profile) setCurrentUser(profile);
+    return { error };
+  };
+
   const signOut = () => {
     const client = getSupabaseClient();
-    client?.auth.signOut();
+    client?.auth.signOut().catch(() => undefined);
+    try {
+      localStorage.removeItem(USER_SESSION_KEY);
+    } catch {
+      // ignore
+    }
     setCurrentUser(DEFAULT_GUEST_PROFILE);
   };
 
@@ -815,6 +865,8 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         sendPhoneOtp,
         verifyPhoneOtp,
         signInWithGoogle,
+        quickGoogleSignIn,
+        isSignedIn,
         signOut,
         connectionMode,
         isSyncing,

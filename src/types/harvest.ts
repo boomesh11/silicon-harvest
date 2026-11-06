@@ -158,7 +158,16 @@ export interface UserProfile {
   pincode?: string;
   walletBalanceInr: number;
   isSupabaseAuthenticated?: boolean;
+  authMethod?: AuthMethod;
 }
+
+export type AuthMethod =
+  | 'GOOGLE_OAUTH'
+  | 'GOOGLE_QUICK'
+  | 'PHONE_SMS'
+  | 'PHONE_ONSCREEN'
+  | 'EMAIL'
+  | 'EMAIL_UNCONFIRMED';
 
 export interface SupportTicket {
   id: string;

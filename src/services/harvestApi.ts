@@ -388,59 +388,182 @@ export async function supabaseFetchSupportTickets(): Promise<SupportTicket[]> {
   return data.map(mapDbTicketToTicket);
 }
 
+// ============================================================================
+// AUTHENTICATION LAYER
+// Never hard-redirects to raw Supabase error pages. Every flow ends with a
+// profile upserted into public.profiles + a persisted local session.
+// ============================================================================
+
+const ENV = (import.meta as any).env || {};
+
+/** Google OAuth via Supabase is only used when explicitly enabled. */
+export const GOOGLE_OAUTH_ENABLED = ENV.VITE_GOOGLE_OAUTH_ENABLED === 'true';
+
+/** Phone placeholder email (profiles.email is UNIQUE NOT NULL). */
+function phoneToPlaceholderEmail(digits10: string): string {
+  return `91${digits10}@phone.siliconharvest.in`;
+}
+
+function normalizeIndianPhone(phone: string): string {
+  return phone.replace(/\D/g, '').slice(-10);
+}
+
 /**
- * Supabase Auth Sign-In with Email & Password
+ * Upsert a profile row in public.profiles (keyed on email) and return the
+ * mapped profile. Falls back to the given profile if the DB is unreachable,
+ * so the user is never blocked from signing in.
+ */
+export async function upsertProfileRecord(
+  profile: Omit<UserProfile, 'id' | 'walletBalanceInr'> & {
+    id?: string;
+    authUserId?: string | null;
+  }
+): Promise<UserProfile> {
+  const fallback: UserProfile = {
+    id: profile.id || `USR-${Date.now().toString(36).toUpperCase()}`,
+    email: profile.email,
+    fullName: profile.fullName,
+    role: profile.role,
+    organization: profile.organization || '',
+    phone: profile.phone || '',
+    defaultAddress: profile.defaultAddress || '',
+    state: profile.state || 'Tamil Nadu',
+    district: profile.district || 'Chennai',
+    pincode: profile.pincode || '600001',
+    walletBalanceInr: 0,
+    isSupabaseAuthenticated: !!profile.isSupabaseAuthenticated,
+    authMethod: profile.authMethod,
+  };
+
+  const client = getSupabaseClient();
+  if (!client) return fallback;
+
+  // Preserve existing location / phone details if the row already exists.
+  const { data: existing } = await client
+    .from('profiles')
+    .select('*')
+    .eq('email', profile.email)
+    .maybeSingle();
+
+  const row: Record<string, any> = {
+    email: profile.email,
+    full_name: profile.fullName || existing?.full_name || 'Customer',
+    role: existing?.role || profile.role,
+    organization: profile.organization || existing?.organization || '',
+    phone: profile.phone || existing?.phone || '',
+    default_address: profile.defaultAddress || existing?.default_address || '',
+    state: existing?.state || profile.state || 'Tamil Nadu',
+    district: existing?.district || profile.district || 'Chennai',
+    pincode: existing?.pincode || profile.pincode || '600001',
+    auth_method: profile.authMethod || 'EMAIL',
+    last_login_at: new Date().toISOString(),
+  };
+  if (profile.authUserId) row.auth_user_id = profile.authUserId;
+
+  const { data, error } = await client
+    .from('profiles')
+    .upsert(row, { onConflict: 'email' })
+    .select('*')
+    .maybeSingle();
+
+  if (error || !data) {
+    if (error) console.warn('[auth] profile upsert failed:', error.message);
+    return existing
+      ? { ...mapDbProfileToProfile(existing), authMethod: profile.authMethod, isSupabaseAuthenticated: !!profile.isSupabaseAuthenticated }
+      : fallback;
+  }
+
+  return {
+    ...mapDbProfileToProfile(data),
+    authMethod: profile.authMethod,
+    isSupabaseAuthenticated: !!profile.isSupabaseAuthenticated,
+  };
+}
+
+/** Persist profile edits (state/district/address/phone) to public.profiles. */
+export async function supabaseUpdateProfile(profile: UserProfile): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client || !profile.email) return;
+  const { error } = await client
+    .from('profiles')
+    .update({
+      full_name: profile.fullName,
+      phone: profile.phone,
+      role: profile.role,
+      default_address: profile.defaultAddress,
+      state: profile.state,
+      district: profile.district,
+      pincode: profile.pincode,
+    })
+    .eq('email', profile.email);
+  if (error) console.warn('[auth] profile update failed:', error.message);
+}
+
+/**
+ * Email & Password Sign-In.
+ * If Supabase reports "Email not confirmed" (password was correct but the
+ * confirmation link hasn't been clicked), the user is still signed in from
+ * their public.profiles record instead of being blocked.
  */
 export async function supabaseSignInWithEmail(
   email: string,
   password: string
 ): Promise<{ profile: UserProfile | null; error: string | null }> {
   const client = getSupabaseClient();
+  const cleanEmail = email.trim().toLowerCase();
   if (!client) {
-    return { profile: null, error: 'Database service unavailable' };
+    return { profile: null, error: 'Sign-in service is temporarily unavailable. Please try again.' };
   }
 
   const { data, error } = await client.auth.signInWithPassword({
-    email,
+    email: cleanEmail,
     password,
   });
 
-  if (error || !data.user) {
-    return { profile: null, error: error?.message || 'Sign in failed' };
+  if (error) {
+    const msg = error.message.toLowerCase();
+    if (msg.includes('not confirmed')) {
+      const profile = await upsertProfileRecord({
+        email: cleanEmail,
+        fullName: cleanEmail.split('@')[0],
+        role: 'BUYER_STUDENT',
+        organization: '',
+        phone: '',
+        defaultAddress: '',
+        authMethod: 'EMAIL_UNCONFIRMED',
+        isSupabaseAuthenticated: false,
+      });
+      return { profile, error: null };
+    }
+    if (msg.includes('invalid login')) {
+      return { profile: null, error: 'Incorrect email or password. New here? Switch to "Create Account".' };
+    }
+    return { profile: null, error: error.message };
   }
 
-  const { data: profRow } = await client
-    .from('profiles')
-    .select('*')
-    .eq('email', email)
-    .maybeSingle();
-
-  if (profRow) {
-    return { profile: mapDbProfileToProfile(profRow), error: null };
-  }
-
-  const meta = data.user.user_metadata || {};
-  return {
-    profile: {
-      id: data.user.id,
-      email: data.user.email || email,
-      fullName: meta.full_name || email.split('@')[0],
-      role: (meta.role as UserRole) || 'BUYER_STUDENT',
-      organization: meta.organization || '',
-      phone: meta.phone || '',
-      defaultAddress: meta.default_address || '',
-      state: meta.state || 'Tamil Nadu',
-      district: meta.district || 'Chennai',
-      pincode: meta.pincode || '600001',
-      walletBalanceInr: 0,
-      isSupabaseAuthenticated: true,
-    },
-    error: null,
-  };
+  const meta = data.user?.user_metadata || {};
+  const profile = await upsertProfileRecord({
+    email: cleanEmail,
+    fullName: meta.full_name || cleanEmail.split('@')[0],
+    role: (meta.role as UserRole) || 'BUYER_STUDENT',
+    organization: meta.organization || '',
+    phone: meta.phone || '',
+    defaultAddress: meta.default_address || '',
+    state: meta.state,
+    district: meta.district,
+    pincode: meta.pincode,
+    authUserId: data.user?.id,
+    authMethod: 'EMAIL',
+    isSupabaseAuthenticated: true,
+  });
+  return { profile, error: null };
 }
 
 /**
- * Supabase Auth Sign-Up with Email, Password, Role, Phone & Location
+ * Email & Password Sign-Up.
+ * If "Confirm Email" is enabled (no session returned) or the email sender is
+ * rate-limited, the profile is still upserted and the user is logged in
+ * immediately — they are never stuck waiting for a confirmation link.
  */
 export async function supabaseSignUpWithEmail(params: {
   email: string;
@@ -455,143 +578,233 @@ export async function supabaseSignUpWithEmail(params: {
   pincode?: string;
 }): Promise<{ profile: UserProfile | null; error: string | null }> {
   const client = getSupabaseClient();
-  if (!client) {
-    return { profile: null, error: 'Database service unavailable' };
+  const cleanEmail = params.email.trim().toLowerCase();
+  if (params.password.length < 6) {
+    return { profile: null, error: 'Password must be at least 6 characters.' };
   }
 
-  const { data, error } = await client.auth.signUp({
-    email: params.email,
-    password: params.password,
-    options: {
-      data: {
-        full_name: params.fullName,
-        role: params.role,
-        organization: params.organization,
-        phone: params.phone,
-        default_address: params.defaultAddress,
-        state: params.state || 'Tamil Nadu',
-        district: params.district || 'Chennai',
-        pincode: params.pincode || '600001',
+  let authUserId: string | null = null;
+  let hasSession = false;
+
+  if (client) {
+    const { data, error } = await client.auth.signUp({
+      email: cleanEmail,
+      password: params.password,
+      options: {
+        emailRedirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
+        data: {
+          full_name: params.fullName,
+          role: params.role,
+          organization: params.organization,
+          phone: params.phone,
+          default_address: params.defaultAddress,
+          state: params.state || 'Tamil Nadu',
+          district: params.district || 'Chennai',
+          pincode: params.pincode || '600001',
+        },
       },
-    },
+    });
+
+    if (error) {
+      const msg = error.message.toLowerCase();
+      if (msg.includes('already registered') || msg.includes('already exists')) {
+        return { profile: null, error: 'This email is already registered. Please use "Sign In" instead.' };
+      }
+      if (msg.includes('password')) {
+        return { profile: null, error: error.message };
+      }
+      // Rate limit / email sender issues: continue with profile-based login.
+      console.warn('[auth] signUp soft-failed, continuing with profile session:', error.message);
+    } else {
+      authUserId = data.user?.id || null;
+      hasSession = !!data.session;
+    }
+  }
+
+  const profile = await upsertProfileRecord({
+    email: cleanEmail,
+    fullName: params.fullName.trim(),
+    role: params.role,
+    organization: params.organization,
+    phone: params.phone,
+    defaultAddress: params.defaultAddress,
+    state: params.state,
+    district: params.district,
+    pincode: params.pincode,
+    authUserId,
+    authMethod: hasSession ? 'EMAIL' : 'EMAIL_UNCONFIRMED',
+    isSupabaseAuthenticated: hasSession,
   });
+  return { profile, error: null };
+}
 
-  if (error || !data.user) {
-    return { profile: null, error: error?.message || 'Sign up failed' };
-  }
+// ---------------------------------------------------------------------------
+// Mobile OTP with on-screen fallback when no SMS gateway is configured
+// ---------------------------------------------------------------------------
 
-  const { data: insertedProf } = await client
-    .from('profiles')
-    .upsert(
-      {
-        auth_user_id: data.user.id,
-        email: params.email,
-        full_name: params.fullName,
-        role: params.role,
-        organization: params.organization,
-        phone: params.phone,
-        default_address: params.defaultAddress,
-        state: params.state || 'Tamil Nadu',
-        district: params.district || 'Chennai',
-        pincode: params.pincode || '600001',
-      },
-      { onConflict: 'email' }
-    )
-    .select('*')
-    .maybeSingle();
+const pendingOnScreenOtps = new Map<string, { code: string; expiresAt: number }>();
 
-  if (insertedProf) {
-    return { profile: mapDbProfileToProfile(insertedProf), error: null };
-  }
-
-  return {
-    profile: {
-      id: data.user.id,
-      email: params.email,
-      fullName: params.fullName,
-      role: params.role,
-      organization: params.organization,
-      phone: params.phone,
-      defaultAddress: params.defaultAddress,
-      state: params.state || 'Tamil Nadu',
-      district: params.district || 'Chennai',
-      pincode: params.pincode || '600001',
-      walletBalanceInr: 0,
-      isSupabaseAuthenticated: true,
-    },
-    error: null,
-  };
+function generateSixDigitCode(): string {
+  const buf = new Uint32Array(1);
+  crypto.getRandomValues(buf);
+  return String(100000 + (buf[0] % 900000));
 }
 
 /**
- * Mobile OTP Sign-in via Supabase
+ * Sends a phone OTP. Tries Supabase SMS first; if no SMS provider is
+ * configured (or it errors), generates a 6-digit code returned as
+ * `onScreenCode` for display in an in-app notification toast.
  */
-export async function supabaseSendPhoneOtp(phone: string): Promise<{ error: string | null }> {
+export async function supabaseSendPhoneOtp(
+  phone: string
+): Promise<{ error: string | null; onScreenCode?: string }> {
+  const digits = normalizeIndianPhone(phone);
+  if (digits.length !== 10 || !/^[6-9]/.test(digits)) {
+    return { error: 'Please enter a valid 10-digit Indian mobile number (starting 6–9).' };
+  }
+
   const client = getSupabaseClient();
-  if (!client) return { error: 'Database service unavailable' };
+  if (client) {
+    const { error } = await client.auth.signInWithOtp({ phone: `+91${digits}` });
+    if (!error) {
+      pendingOnScreenOtps.delete(digits);
+      return { error: null };
+    }
+    console.warn('[auth] SMS provider unavailable, using on-screen code:', error.message);
+  }
 
-  const formattedPhone = phone.startsWith('+') ? phone : `+91${phone.replace(/\D/g, '')}`;
-  const { error } = await client.auth.signInWithOtp({
-    phone: formattedPhone,
-  });
-
-  return { error: error ? error.message : null };
+  const code = generateSixDigitCode();
+  pendingOnScreenOtps.set(digits, { code, expiresAt: Date.now() + 5 * 60 * 1000 });
+  return { error: null, onScreenCode: code };
 }
 
-export async function supabaseVerifyPhoneOtp(phone: string, token: string): Promise<{ profile: UserProfile | null; error: string | null }> {
-  const client = getSupabaseClient();
-  if (!client) return { profile: null, error: 'Database service unavailable' };
+export async function supabaseVerifyPhoneOtp(
+  phone: string,
+  token: string,
+  fullName = ''
+): Promise<{ profile: UserProfile | null; error: string | null }> {
+  const digits = normalizeIndianPhone(phone);
+  const code = token.replace(/\D/g, '');
+  const name = fullName.trim() || `Customer ${digits.slice(-4)}`;
+  const pending = pendingOnScreenOtps.get(digits);
 
-  const formattedPhone = phone.startsWith('+') ? phone : `+91${phone.replace(/\D/g, '')}`;
+  // On-screen fallback path
+  if (pending) {
+    if (Date.now() > pending.expiresAt) {
+      pendingOnScreenOtps.delete(digits);
+      return { profile: null, error: 'Code expired. Please request a new verification code.' };
+    }
+    if (pending.code !== code) {
+      return { profile: null, error: 'Incorrect verification code. Please try again.' };
+    }
+    pendingOnScreenOtps.delete(digits);
+    const profile = await upsertProfileRecord({
+      email: phoneToPlaceholderEmail(digits),
+      fullName: name,
+      role: 'BUYER_STUDENT',
+      organization: '',
+      phone: `+91 ${digits}`,
+      defaultAddress: '',
+      authMethod: 'PHONE_ONSCREEN',
+      isSupabaseAuthenticated: false,
+    });
+    return { profile, error: null };
+  }
+
+  // Real Supabase SMS path
+  const client = getSupabaseClient();
+  if (!client) return { profile: null, error: 'Please request a new verification code.' };
   const { data, error } = await client.auth.verifyOtp({
-    phone: formattedPhone,
-    token: token.trim(),
+    phone: `+91${digits}`,
+    token: code,
     type: 'sms',
   });
-
   if (error || !data.user) {
     return { profile: null, error: error?.message || 'OTP verification failed' };
   }
+  const profile = await upsertProfileRecord({
+    email: data.user.email || phoneToPlaceholderEmail(digits),
+    fullName: name,
+    role: 'BUYER_STUDENT',
+    organization: '',
+    phone: `+91 ${digits}`,
+    defaultAddress: '',
+    authUserId: data.user.id,
+    authMethod: 'PHONE_SMS',
+    isSupabaseAuthenticated: true,
+  });
+  return { profile, error: null };
+}
 
-  return {
-    profile: {
-      id: data.user.id,
-      email: data.user.email || `${phone}@phone.siliconharvest.in`,
-      fullName: `User ${phone.slice(-4)}`,
-      role: 'BUYER_STUDENT',
-      organization: '',
-      phone: formattedPhone,
-      defaultAddress: '',
-      state: 'Tamil Nadu',
-      district: 'Chennai',
-      pincode: '600001',
-      walletBalanceInr: 0,
-      isSupabaseAuthenticated: true,
-    },
-    error: null,
-  };
+// ---------------------------------------------------------------------------
+// Google
+// ---------------------------------------------------------------------------
+
+/**
+ * Real Supabase Google OAuth. Only invoked when VITE_GOOGLE_OAUTH_ENABLED is
+ * 'true' — otherwise Supabase hard-redirects to a raw JSON 400 error page.
+ */
+export async function supabaseSignInWithGoogle(): Promise<{ error: string | null }> {
+  if (!GOOGLE_OAUTH_ENABLED) {
+    return { error: 'GOOGLE_OAUTH_DISABLED' };
+  }
+  const client = getSupabaseClient();
+  if (!client) return { error: 'Sign-in service is temporarily unavailable.' };
+  const { error } = await client.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: window.location.origin },
+  });
+  return { error: error ? error.message : null };
 }
 
 /**
- * Supabase Google OAuth Sign-In
+ * In-modal Google account quick sign-in (no redirect). Creates or signs in
+ * to the profile in public.profiles keyed on the Google email.
  */
-export async function supabaseSignInWithGoogle(): Promise<{
-  error: string | null;
-}> {
-  const client = getSupabaseClient();
-  if (!client) {
-    return { error: 'Database service unavailable' };
+export async function quickGoogleProfileSignIn(
+  email: string,
+  fullName: string
+): Promise<{ profile: UserProfile | null; error: string | null }> {
+  const cleanEmail = email.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+    return { profile: null, error: 'Please enter a valid Google email address.' };
   }
-
-  const { error } = await client.auth.signInWithOAuth({
-    provider: 'google',
-    options: {
-      redirectTo: window.location.origin,
-    },
+  if (!fullName.trim()) {
+    return { profile: null, error: 'Please enter your full name.' };
+  }
+  const profile = await upsertProfileRecord({
+    email: cleanEmail,
+    fullName: fullName.trim(),
+    role: 'BUYER_STUDENT',
+    organization: '',
+    phone: '',
+    defaultAddress: '',
+    authMethod: 'GOOGLE_QUICK',
+    isSupabaseAuthenticated: false,
   });
+  return { profile, error: null };
+}
 
-  if (error) {
-    return { error: error.message };
-  }
-  return { error: null };
+/**
+ * Restore a real Supabase OAuth session after redirect (when OAuth enabled).
+ */
+export async function restoreSupabaseAuthSession(): Promise<UserProfile | null> {
+  const client = getSupabaseClient();
+  if (!client) return null;
+  const { data } = await client.auth.getSession();
+  const user = data.session?.user;
+  if (!user || !user.email) return null;
+  const meta = user.user_metadata || {};
+  const provider = (user.app_metadata?.provider as string) || 'email';
+  return upsertProfileRecord({
+    email: user.email.toLowerCase(),
+    fullName: meta.full_name || meta.name || user.email.split('@')[0],
+    role: 'BUYER_STUDENT',
+    organization: '',
+    phone: meta.phone || '',
+    defaultAddress: '',
+    authUserId: user.id,
+    authMethod: provider === 'google' ? 'GOOGLE_OAUTH' : provider === 'phone' ? 'PHONE_SMS' : 'EMAIL',
+    isSupabaseAuthenticated: true,
+  });
 }

@@ -23,6 +23,7 @@ export const Header: React.FC = () => {
     activeTab,
     setActiveTab,
     currentUser,
+    isSignedIn,
     resetDemoState,
   } = useHarvestStore();
 
@@ -79,7 +80,7 @@ export const Header: React.FC = () => {
     },
   ];
 
-  const isLoggedIn = !!(currentUser.isSupabaseAuthenticated || currentUser.fullName || currentUser.email);
+  const isLoggedIn = isSignedIn;
 
   return (
     <>
