@@ -10,6 +10,7 @@ import { TechWorkbenchPortal } from './components/TechWorkbenchPortal';
 import { OrdersTrackerPortal } from './components/OrdersTrackerPortal';
 import { ImpactAnalyticsPortal } from './components/ImpactAnalyticsPortal';
 import { SupportContactPortal } from './components/SupportContactPortal';
+import { LoginPage } from './components/LoginPage';
 import { Leaf, ShieldCheck, Flame, Layers, HelpCircle, Truck } from 'lucide-react';
 
 const MainShell: React.FC = () => {
@@ -27,6 +28,7 @@ const MainShell: React.FC = () => {
       <Header />
 
       <main className="relative flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-20">
+        {activeTab === 'LOGIN' && <LoginPage />}
         {activeTab === 'MARKETPLACE' && <MarketplacePortal />}
         {activeTab === 'SELLER_PORTAL' && <SellerPortal />}
         {activeTab === 'TECH_WORKBENCH' && <TechWorkbenchPortal />}

@@ -222,7 +222,15 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   );
   const isSignedIn = currentUser.id !== DEFAULT_GUEST_PROFILE.id && !!currentUser.email;
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>('MARKETPLACE');
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
+    if (
+      typeof window !== 'undefined' &&
+      (window.location.pathname === '/login' || window.location.hash === '#/login')
+    ) {
+      return 'LOGIN';
+    }
+    return isSignedIn ? 'MARKETPLACE' : 'LOGIN';
+  });
   const [connectionMode, setConnectionMode] = useState<ConnectionMode>(() =>
     getSupabaseClient() ? 'SUPABASE_CLOUD' : 'LOCAL_FALLBACK'
   );
@@ -297,18 +305,38 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, [currentUser]);
 
-  // Restore a real Supabase OAuth / email session (e.g. after Google redirect)
+  // Restore a real Supabase OAuth / email session & subscribe to auth state changes
   useEffect(() => {
     let cancelled = false;
     restoreSupabaseAuthSession()
       .then((profile) => {
-        if (!cancelled && profile) setCurrentUser(profile);
+        if (!cancelled && profile) {
+          setCurrentUser(profile);
+          setActiveTab((prev) => (prev === 'LOGIN' ? 'MARKETPLACE' : prev));
+        }
       })
       .catch(() => {
         // ignore — local session (if any) remains active
       });
+
+    const client = getSupabaseClient();
+    const sub = client?.auth.onAuthStateChange((event, session) => {
+      if (cancelled) return;
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user?.email) {
+        restoreSupabaseAuthSession()
+          .then((profile) => {
+            if (!cancelled && profile) {
+              setCurrentUser(profile);
+              setActiveTab((prev) => (prev === 'LOGIN' ? 'MARKETPLACE' : prev));
+            }
+          })
+          .catch(() => undefined);
+      }
+    });
+
     return () => {
       cancelled = true;
+      sub?.data?.subscription?.unsubscribe();
     };
   }, []);
 
@@ -460,6 +488,7 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     const { profile, error } = await supabaseSignInWithEmail(email, password);
     if (profile) {
       setCurrentUser(profile);
+      setActiveTab('MARKETPLACE');
     }
     return { error };
   };
@@ -490,6 +519,7 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     });
     if (profile) {
       setCurrentUser(profile);
+      setActiveTab('MARKETPLACE');
     }
     return { error };
   };
@@ -502,6 +532,7 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     const { profile, error } = await supabaseVerifyPhoneOtp(phone, token, fullName);
     if (profile) {
       setCurrentUser(profile);
+      setActiveTab('MARKETPLACE');
     }
     return { error };
   };
@@ -512,7 +543,10 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const quickGoogleSignIn = async (email: string, fullName: string) => {
     const { profile, error } = await quickGoogleProfileSignIn(email, fullName);
-    if (profile) setCurrentUser(profile);
+    if (profile) {
+      setCurrentUser(profile);
+      setActiveTab('MARKETPLACE');
+    }
     return { error };
   };
 
@@ -521,10 +555,12 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     client?.auth.signOut().catch(() => undefined);
     try {
       localStorage.removeItem(USER_SESSION_KEY);
+      localStorage.removeItem(STORAGE_KEYS.USER);
     } catch {
       // ignore
     }
     setCurrentUser(DEFAULT_GUEST_PROFILE);
+    setActiveTab('LOGIN');
   };
 
   const placeOrder = (payload: PlaceOrderPayload): Order => {
@@ -835,6 +871,7 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       Object.values(STORAGE_KEYS).forEach((key) => localStorage.removeItem(key));
       LEGACY_KEYS_TO_PURGE.forEach((key) => localStorage.removeItem(key));
+      localStorage.removeItem(USER_SESSION_KEY);
     } catch {
       // ignore
     }
@@ -843,6 +880,7 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     setOrders(INITIAL_ORDERS);
     setSupportTickets([]);
     setCurrentUser(DEFAULT_GUEST_PROFILE);
+    setActiveTab('LOGIN');
     broadcastLocalStateUpdate();
   };
 

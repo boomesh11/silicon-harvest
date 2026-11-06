@@ -131,6 +131,7 @@ export interface BoardTemplate {
 }
 
 export type ActiveTab =
+  | 'LOGIN'
   | 'MARKETPLACE'
   | 'SELLER_PORTAL'
   | 'TECH_WORKBENCH'
