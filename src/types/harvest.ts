@@ -2,7 +2,15 @@ export type BoardCategory =
   | 'ACADEMIC_MAKER'
   | 'POWER_SMPS'
   | 'APPLIANCE_PCB'
-  | 'LAPTOP_MOBILE';
+  | 'LAPTOP_MOBILE'
+  | 'IC_MICROCONTROLLERS'
+  | 'WASHING_MACHINE_APPLIANCE'
+  | 'BATTERIES_POWER_CELLS'
+  | 'SMPS_POWER_INVERTERS'
+  | 'LAPTOP_MOBILE_MOTHERBOARDS'
+  | 'DISPLAYS_SENSORS_MODULES'
+  | 'MOTORS_ROBOTICS_CNC'
+  | 'AUDIO_TV_CONSUMER';
 
 export type BoardStatus =
   | 'AVAILABLE'
@@ -26,7 +34,10 @@ export type OrderMode =
 export type DeliveryType =
   | 'CAMPUS_HUB_PICKUP'
   | 'HYPERLOCAL_PORTER'
-  | 'OUTSTATION_PARCEL';
+  | 'OUTSTATION_PARCEL'
+  | 'HYPERLOCAL_RAPIDO'
+  | 'HYPERLOCAL_DUNZO'
+  | 'OUTSTATION_DELHIVERY';
 
 export type OrderStatus =
   | 'PENDING_EXTRACTION'
@@ -37,15 +48,22 @@ export interface DonorBoard {
   id: string;
   boardName: string;
   category: BoardCategory;
+  subModel?: string;
   sellerName: string;
+  sellerPhone?: string;
+  sellerState?: string;
+  sellerDistrict?: string;
+  sellerPincode?: string;
   locationCity?: string;
   locationArea: string;
   distanceKm: number;
   primaryFault: string;
   rawBoardPriceInr: number;
   status: BoardStatus;
+  imageUrl?: string;
   totalComponentsCount?: number;
   intactComponentsCount?: number;
+  createdAt?: string;
 }
 
 export interface HarvestableComponent {
@@ -69,18 +87,24 @@ export interface Order {
   buyerName: string;
   buyerPhone: string;
   buyerAddress: string;
+  buyerState?: string;
+  buyerDistrict?: string;
+  buyerPincode?: string;
   donorBoardId: string;
   componentId: string | null;
   mode: OrderMode;
   deliveryType: DeliveryType;
+  logisticsPartner?: string;
   itemPriceInr: number;
   extractionFeeInr: number;
   deliveryFeeInr: number;
+  platformCommissionInr?: number;
   totalPayableInr: number;
   status: OrderStatus;
   multimeterReadingValue: string;
   trackingOrPorterLink?: string;
   upiUtrOrPaymentId?: string;
+  paymentUtr?: string;
   createdAt: string;
 }
 
@@ -111,6 +135,7 @@ export type ActiveTab =
   | 'SELLER_PORTAL'
   | 'TECH_WORKBENCH'
   | 'ORDERS_TRACKER'
+  | 'SUPPORT_CONTACT'
   | 'ESG_ANALYTICS';
 
 export type ConnectionMode = 'SUPABASE_CLOUD' | 'LOCAL_FALLBACK';
@@ -128,8 +153,22 @@ export interface UserProfile {
   organization: string;
   phone: string;
   defaultAddress: string;
+  state?: string;
+  district?: string;
+  pincode?: string;
   walletBalanceInr: number;
   isSupabaseAuthenticated?: boolean;
 }
 
-
+export interface SupportTicket {
+  id: string;
+  ticketCode: string;
+  customerName: string;
+  customerPhone: string;
+  customerEmail?: string;
+  orderCode?: string;
+  category: string;
+  message: string;
+  status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED';
+  createdAt: string;
+}

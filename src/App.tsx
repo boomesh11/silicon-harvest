@@ -9,7 +9,8 @@ import { SellerPortal } from './components/SellerPortal';
 import { TechWorkbenchPortal } from './components/TechWorkbenchPortal';
 import { OrdersTrackerPortal } from './components/OrdersTrackerPortal';
 import { ImpactAnalyticsPortal } from './components/ImpactAnalyticsPortal';
-import { Leaf, ShieldCheck, Flame, Layers } from 'lucide-react';
+import { SupportContactPortal } from './components/SupportContactPortal';
+import { Leaf, ShieldCheck, Flame, Layers, HelpCircle, Truck } from 'lucide-react';
 
 const MainShell: React.FC = () => {
   const { activeTab, setActiveTab } = useHarvestStore();
@@ -31,6 +32,7 @@ const MainShell: React.FC = () => {
         {activeTab === 'TECH_WORKBENCH' && <TechWorkbenchPortal />}
         {activeTab === 'ORDERS_TRACKER' && <OrdersTrackerPortal />}
         {activeTab === 'ESG_ANALYTICS' && <ImpactAnalyticsPortal />}
+        {activeTab === 'SUPPORT_CONTACT' && <SupportContactPortal />}
       </main>
 
       <footer className="relative border-t border-slate-200/80 bg-white/80 backdrop-blur-xl py-8">
@@ -48,15 +50,22 @@ const MainShell: React.FC = () => {
               Multimeter QC Guaranteed
             </span>
             <span className="flex items-center gap-1.5 text-slate-600">
-              <Flame className="w-3.5 h-3.5 text-amber-600" />
-              Precision Hot-Air Rework
+              <Truck className="w-3.5 h-3.5 text-sky-600" />
+              District Hyperlocal &amp; India Post
             </span>
+            <button
+              onClick={() => setActiveTab('SUPPORT_CONTACT')}
+              className="flex items-center gap-1.5 text-slate-700 hover:text-emerald-700 font-medium transition-colors"
+            >
+              <HelpCircle className="w-3.5 h-3.5 text-emerald-600" />
+              Support &amp; Helpdesk
+            </button>
             <button
               onClick={() => setActiveTab('ESG_ANALYTICS')}
               className="flex items-center gap-1.5 text-slate-700 hover:text-emerald-700 font-medium transition-colors"
             >
               <Layers className="w-3.5 h-3.5 text-emerald-600" />
-              ESG Impact &amp; Hub Telemetry
+              ESG Telemetry
             </button>
           </div>
         </div>

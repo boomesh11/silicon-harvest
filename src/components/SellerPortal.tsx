@@ -1,719 +1,803 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  Cpu,
-  PlusCircle,
+  Camera,
+  Upload,
   CheckCircle2,
-  Sparkles,
   MapPin,
   ArrowRight,
-  Upload,
-  KeyRound,
-  ScanLine,
+  ShieldCheck,
   AlertCircle,
+  Tag,
+  Sliders,
+  DollarSign,
+  Package,
+  Trash2,
 } from 'lucide-react';
-import { BOARD_TEMPLATES } from '../data/seedData';
 import { useHarvestStore } from '../store/useHarvestStore';
+import {
+  CATALOG_CATEGORIES,
+  CatalogCategory,
+  INDIAN_STATES_DISTRICTS,
+} from '../data/catalogPricing';
 import {
   BoardCategory,
   BoardTemplateComponent,
   DonorBoard,
 } from '../types/harvest';
-import {
-  scanPcbPhotoForBom,
-  getGeminiApiKey,
-  saveRuntimeGeminiApiKey,
-  AiScannedPcbResult,
-} from '../services/geminiPcbScanner';
+
+interface SelectedComponentConfig {
+  optionId: string;
+  partNumber: string;
+  partName: string;
+  componentCategory: string;
+  packageType: string;
+  difficulty: 'LEVEL_1_PLUG_PULL' | 'LEVEL_2_BASIC_IRON' | 'LEVEL_3_HOT_AIR_SMD';
+  recommendedTempC: number;
+  extractionFeeInr: number;
+  bypassHackTip?: string;
+  statusMode: 'WORKING' | 'DAMAGED' | 'NOT_PRESENT';
+  chosenPrice: number;
+}
 
 export const SellerPortal: React.FC = () => {
   const { publishDonorBoard, setActiveTab, currentUser } = useHarvestStore();
 
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(
-    BOARD_TEMPLATES[0].id
+  // Category & Sub-Model
+  const [selectedCategory, setSelectedCategory] = useState<CatalogCategory>(
+    CATALOG_CATEGORIES[0]
   );
-  const [boardName, setBoardName] = useState<string>(
-    BOARD_TEMPLATES[0].boardName
+  const [subModel, setSubModel] = useState<string>('');
+  const [boardName, setBoardName] = useState<string>('');
+  const [rawBoardPriceInr, setRawBoardPriceInr] = useState<number>(
+    CATALOG_CATEGORIES[0].rawBoardPriceTiers[1].price
   );
-  const [category, setCategory] = useState<BoardCategory>(
-    BOARD_TEMPLATES[0].category
-  );
+
+  // Photo Upload State
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [imageUrl, setImageUrl] = useState<string>('');
+  const [isProcessingImage, setIsProcessingImage] = useState(false);
+
+  // Sub-Components Configurator
+  const [componentConfigs, setComponentConfigs] = useState<
+    SelectedComponentConfig[]
+  >([]);
+
+  // Location & Contact
   const [sellerName, setSellerName] = useState<string>(
     currentUser.fullName || ''
+  );
+  const [sellerPhone, setSellerPhone] = useState<string>(
+    currentUser.phone ? currentUser.phone.replace(/\D/g, '').slice(-10) : ''
+  );
+  const [state, setState] = useState<string>(
+    currentUser.state || 'Tamil Nadu'
+  );
+  const [district, setDistrict] = useState<string>(
+    currentUser.district || 'Chennai'
   );
   const [locationArea, setLocationArea] = useState<string>(
     currentUser.defaultAddress || ''
   );
-  const [distanceKm, setDistanceKm] = useState<number>(2.8);
-  const [rawBoardPriceInr, setRawBoardPriceInr] = useState<number>(
-    BOARD_TEMPLATES[0].defaultRawPriceInr
+  const [pincode, setPincode] = useState<string>(
+    currentUser.pincode || '600001'
   );
-
-  useEffect(() => {
-    if (currentUser.fullName && !sellerName) {
-      setSellerName(currentUser.fullName);
-    }
-    if (currentUser.defaultAddress && !locationArea) {
-      setLocationArea(currentUser.defaultAddress);
-    }
-  }, [currentUser.fullName, currentUser.defaultAddress, sellerName, locationArea]);
-
-  const [bomItems, setBomItems] = useState<
-    (BoardTemplateComponent & { isPrimaryFault: boolean })[]
-  >(() =>
-    BOARD_TEMPLATES[0].components.map((c) => ({
-      ...c,
-      isPrimaryFault:
-        c.partNumber === BOARD_TEMPLATES[0].defaultPrimaryFaultPartNumber,
-    }))
-  );
-
-  // Live Gemini 2.5 Flash Vision PCB Photo Scanner State
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [isScanningPhoto, setIsScanningPhoto] = useState(false);
-  const [uploadedPreviewUrl, setUploadedPreviewUrl] = useState<string | null>(
-    null
-  );
-  const [lastAiScanResult, setLastAiScanResult] =
-    useState<AiScannedPcbResult | null>(null);
-  const [aiScanError, setAiScanError] = useState<string | null>(null);
-  const [showGeminiKeyInput, setShowGeminiKeyInput] = useState(false);
-  const [geminiKey, setGeminiKey] = useState(() => getGeminiApiKey());
 
   const [publishedBoard, setPublishedBoard] = useState<DonorBoard | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const handleSelectTemplate = (templateId: string) => {
-    const tpl = BOARD_TEMPLATES.find((t) => t.id === templateId);
-    if (!tpl) return;
-    setSelectedTemplateId(tpl.id);
-    setBoardName(tpl.boardName);
-    setCategory(tpl.category);
-    setRawBoardPriceInr(tpl.defaultRawPriceInr);
-    setBomItems(
-      tpl.components.map((c) => ({
-        ...c,
-        isPrimaryFault: c.partNumber === tpl.defaultPrimaryFaultPartNumber,
-      }))
+  // When selected category changes, reinitialize the component checklist
+  useEffect(() => {
+    setSubModel(selectedCategory.subModels[0] || '');
+    setBoardName(`Salvage ${selectedCategory.subModels[0] || selectedCategory.shortName}`);
+    setRawBoardPriceInr(selectedCategory.rawBoardPriceTiers[1]?.price || 50);
+
+    const initialConfigs: SelectedComponentConfig[] = selectedCategory.subComponents.map(
+      (sc) => ({
+        optionId: sc.id,
+        partNumber: sc.partNumber,
+        partName: sc.partName,
+        componentCategory: sc.componentCategory,
+        packageType: sc.packageType,
+        difficulty: sc.difficulty,
+        recommendedTempC: sc.recommendedTempC,
+        extractionFeeInr: sc.extractionFeeInr,
+        bypassHackTip: sc.bypassHackTip,
+        statusMode: 'WORKING',
+        chosenPrice: sc.priceTiers[sc.defaultTierIndex] || sc.priceTiers[1],
+      })
     );
+    setComponentConfigs(initialConfigs);
     setPublishedBoard(null);
-    setAiScanError(null);
-  };
+  }, [selectedCategory]);
 
-  const applyAiScanToForm = (res: AiScannedPcbResult) => {
-    setLastAiScanResult(res);
-    setAiScanError(null);
-    setSelectedTemplateId('AI_CUSTOM_SCAN');
-    setBoardName(res.boardName);
-    setCategory(res.category);
-    setRawBoardPriceInr(res.defaultRawPriceInr);
-    setBomItems(res.components);
-    setPublishedBoard(null);
-  };
+  // Sync user profile changes
+  useEffect(() => {
+    if (currentUser.fullName && !sellerName) setSellerName(currentUser.fullName);
+    if (currentUser.phone && !sellerPhone) {
+      setSellerPhone(currentUser.phone.replace(/\D/g, '').slice(-10));
+    }
+    if (currentUser.district && district === 'Chennai') setDistrict(currentUser.district);
+    if (currentUser.defaultAddress && !locationArea) setLocationArea(currentUser.defaultAddress);
+  }, [currentUser]);
 
-  const handleFileUpload = async (file: File) => {
-    const objectUrl = URL.createObjectURL(file);
-    setUploadedPreviewUrl(objectUrl);
-    setIsScanningPhoto(true);
-    setAiScanError(null);
-    try {
-      const scanRes = await scanPcbPhotoForBom(file);
-      applyAiScanToForm(scanRes);
-    } catch (err: any) {
-      setAiScanError(
-        err?.message ||
-          'Failed to scan PCB photo with Gemini 2.5 Flash Vision.'
-      );
-      if (!getGeminiApiKey()) {
-        setShowGeminiKeyInput(true);
-      }
-    } finally {
-      setIsScanningPhoto(false);
+  const availableDistricts =
+    INDIAN_STATES_DISTRICTS.find((s) => s.state === state)?.districts || [];
+
+  const handleStateChange = (newState: string) => {
+    setState(newState);
+    const newDistricts =
+      INDIAN_STATES_DISTRICTS.find((s) => s.state === newState)?.districts || [];
+    if (newDistricts.length > 0) {
+      setDistrict(newDistricts[0]);
     }
   };
 
-  const handleSetPrimaryFault = (index: number) => {
-    setBomItems((prev) =>
-      prev.map((item, idx) => ({
-        ...item,
-        isPrimaryFault: idx === index,
-      }))
+  // Client-side HTML5 Canvas Photo Compression (0 API Keys required)
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsProcessingImage(true);
+    setErrorMsg(null);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxDim = 1000;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          }
+        } else {
+          if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.82);
+          setImageUrl(compressedDataUrl);
+        }
+        setIsProcessingImage(false);
+      };
+      img.onerror = () => {
+        setIsProcessingImage(false);
+        setErrorMsg('Failed to process image file.');
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSubModelSelect = (model: string) => {
+    setSubModel(model);
+    setBoardName(`Salvage ${model}`);
+  };
+
+  const updateComponentStatus = (
+    optionId: string,
+    statusMode: 'WORKING' | 'DAMAGED' | 'NOT_PRESENT'
+  ) => {
+    setComponentConfigs((prev) =>
+      prev.map((c) => (c.optionId === optionId ? { ...c, statusMode } : c))
     );
   };
 
-  const handlePartPriceChange = (index: number, newPrice: number) => {
-    setBomItems((prev) =>
-      prev.map((item, idx) =>
-        idx === index ? { ...item, partPriceInr: Math.max(0, newPrice) } : item
-      )
+  const updateComponentPrice = (optionId: string, chosenPrice: number) => {
+    setComponentConfigs((prev) =>
+      prev.map((c) => (c.optionId === optionId ? { ...c, chosenPrice } : c))
     );
   };
 
-  const faultyComponent = bomItems.find((i) => i.isPrimaryFault) || bomItems[0];
-  const primaryFaultSummary = faultyComponent
-    ? `${faultyComponent.partNumber} (${faultyComponent.partName}) blown/shorted`
-    : 'Primary power rail fault';
-
-  const totalIntactPartsValue = bomItems
-    .filter((i) => !i.isPrimaryFault)
-    .reduce((sum, i) => sum + i.partPriceInr, 0);
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handlePublishListing = (e: React.FormEvent) => {
     e.preventDefault();
-    const created = publishDonorBoard({
-      boardName: boardName.trim(),
-      category,
-      sellerName: sellerName.trim(),
-      locationArea: locationArea.trim(),
-      distanceKm,
-      primaryFault: primaryFaultSummary,
-      rawBoardPriceInr,
-      components: bomItems,
-    });
-    setPublishedBoard(created);
-  };
+    setErrorMsg(null);
 
-  const presetLocations = [
-    { label: 'Guindy / Anna Univ Campus, Chennai', dist: 2.4 },
-    { label: 'Ritchie Street Hub, Chennai', dist: 8.1 },
-    { label: 'IITM Research Park, Taramani, Chennai', dist: 4.9 },
-    { label: 'SP Road, Bengaluru', dist: 342.0 },
-  ];
+    const cleanPhone = sellerPhone.replace(/\D/g, '').slice(-10);
+    if (cleanPhone.length !== 10) {
+      setErrorMsg('Please enter a valid 10-digit seller contact phone number.');
+      return;
+    }
+    if (!sellerName.trim()) {
+      setErrorMsg('Please enter the seller or lab donor name.');
+      return;
+    }
+    if (!locationArea.trim()) {
+      setErrorMsg('Please enter your area, college campus, or shop street address.');
+      return;
+    }
+
+    // Filter active sub-components
+    const activeComponents = componentConfigs.filter(
+      (c) => c.statusMode !== 'NOT_PRESENT'
+    );
+    if (activeComponents.length === 0) {
+      setErrorMsg('Please keep at least one sub-component in Working or Damaged status.');
+      return;
+    }
+
+    const primaryFault =
+      activeComponents.find((c) => c.statusMode === 'DAMAGED')?.partNumber ||
+      'Power surge / Overvoltage fault';
+
+    const componentsPayload: (BoardTemplateComponent & { isPrimaryFault: boolean })[] = activeComponents.map(
+      (c) => ({
+        partNumber: c.partNumber,
+        partName: c.partName,
+        componentCategory: c.componentCategory,
+        packageType: c.packageType,
+        difficulty: c.difficulty,
+        recommendedTempC: c.recommendedTempC,
+        partPriceInr: c.statusMode === 'WORKING' ? c.chosenPrice : 0,
+        extractionFeeInr: c.extractionFeeInr,
+        bypassHackTip: c.bypassHackTip,
+        isPrimaryFault: c.statusMode === 'DAMAGED',
+      })
+    );
+
+    try {
+      const published = publishDonorBoard({
+        boardName: boardName.trim() || `${subModel || selectedCategory.shortName}`,
+        category: selectedCategory.id as BoardCategory,
+        subModel: subModel || undefined,
+        sellerName: sellerName.trim(),
+        sellerPhone: `+91 ${cleanPhone}`,
+        sellerState: state,
+        sellerDistrict: district,
+        sellerPincode: pincode.trim(),
+        locationArea: locationArea.trim(),
+        distanceKm: 2.5,
+        primaryFault,
+        rawBoardPriceInr,
+        imageUrl: imageUrl || undefined,
+        components: componentsPayload,
+      });
+
+      setPublishedBoard(published);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to publish listing.');
+    }
+  };
 
   return (
-    <div className="space-y-8">
-      {/* Header Banner */}
-      <div className="bg-white/90 backdrop-blur-2xl border border-slate-200/80 rounded-3xl p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-[0_8px_30px_rgba(15,23,42,0.05)]">
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-xs font-semibold uppercase tracking-widest px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-              SELLER AUTO-BoM &amp; GEMINI 2.5 FLASH VISION
-            </span>
-            <span className="font-mono text-xs text-slate-500">
-              • Hardware Reference Templates + Live Photo Scanner
-            </span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-[#1D1D1F]">
-            List Dead Hardware &amp; Auto-Generate Component BoM
-          </h1>
-          <p className="text-sm text-slate-600 leading-relaxed max-w-2xl">
-            Upload a real circuit board photo for Gemini 2.5 Flash Vision
-            detection, or select a 1-Click Hardware Reference Template below,
-            mark the{' '}
-            <span className="text-rose-600 font-mono font-medium">
-              🔴 Primary Fault
-            </span>
-            , and publish all{' '}
-            <span className="text-emerald-700 font-mono font-medium">
-              🟢 Intact
-            </span>{' '}
-            ICs.
-          </p>
+    <div className="pt-24 pb-20 px-4 sm:px-6 max-w-5xl mx-auto space-y-8 animate-in fade-in duration-300">
+      {/* Hero Header */}
+      <div className="text-center space-y-2">
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold">
+          <Tag className="w-3.5 h-3.5" />
+          <span>Consumer Hardware Salvage Listing</span>
         </div>
-
-        {/* Recovery Value Comparison Pill */}
-        <div className="bg-slate-50 border border-slate-200/90 rounded-2xl px-5 py-4 flex items-center gap-5 shrink-0 font-mono">
-          <div>
-            <div className="text-[10px] text-slate-500 uppercase">
-              Scrap Weight Value
-            </div>
-            <div className="text-sm font-bold text-rose-600 line-through">
-              ₹10 / PCB
-            </div>
-          </div>
-          <div className="text-slate-400">→</div>
-          <div>
-            <div className="text-[10px] text-slate-500 uppercase">
-              Raw Board Ask
-            </div>
-            <div className="text-sm font-bold text-amber-700">
-              ₹{rawBoardPriceInr}
-            </div>
-          </div>
-          <div className="text-slate-400">→</div>
-          <div>
-            <div className="text-[10px] text-emerald-700 uppercase font-semibold">
-              Child IC Yield
-            </div>
-            <div className="text-base font-bold text-emerald-700">
-              ₹{totalIntactPartsValue}
-            </div>
-          </div>
-        </div>
+        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#1D1D1F]">
+          List Dead Circuit Boards & Salvage Parts
+        </h1>
+        <p className="text-slate-500 text-sm max-w-xl mx-auto">
+          Choose from standardized categories, toggle working components, and set fixed price tiers. Local buyers in {district} can order within 45 minutes!
+        </p>
       </div>
 
-      {/* Published Confirmation Banner */}
-      {publishedBoard && (
-        <div className="bg-emerald-50/90 backdrop-blur-2xl border border-emerald-300 rounded-3xl p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
-          <div className="flex items-start gap-3.5">
-            <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0 mt-0.5" />
-            <div>
-              <h3 className="text-base font-semibold text-[#1D1D1F]">
-                Published Live to SiliconHarvest Marketplace! (
-                {publishedBoard.id})
-              </h3>
-              <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                <strong className="text-[#1D1D1F]">
-                  {publishedBoard.boardName}
-                </strong>{' '}
-                is now live with{' '}
-                <span className="font-mono text-emerald-700 font-semibold">
-                  {bomItems.filter((i) => !i.isPrimaryFault).length} intact
-                  child components
-                </span>{' '}
-                and primary fault marked as{' '}
-                <span className="font-mono text-rose-700 font-semibold">
-                  {publishedBoard.primaryFault}
-                </span>
-                .
-              </p>
+      {publishedBoard ? (
+        <div className="bg-white rounded-3xl border border-emerald-200 p-8 text-center space-y-5 shadow-xl shadow-emerald-500/5 animate-in zoom-in-95 duration-200">
+          <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
+            <CheckCircle2 className="w-8 h-8" />
+          </div>
+          <div className="space-y-1">
+            <h2 className="text-2xl font-bold text-[#1D1D1F]">
+              Listing Published Successfully!
+            </h2>
+            <p className="text-sm text-slate-500 font-mono">
+              Board ID: {publishedBoard.id} • {publishedBoard.boardName}
+            </p>
+          </div>
+
+          <div className="max-w-md mx-auto p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-left space-y-2">
+            <div className="flex justify-between">
+              <span className="text-slate-500">Pickup District:</span>
+              <span className="font-semibold text-slate-800">{publishedBoard.sellerDistrict}, {publishedBoard.sellerState}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Full Soldered Price:</span>
+              <span className="font-semibold font-mono text-emerald-700">₹{publishedBoard.rawBoardPriceInr}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Harvestable Child Parts:</span>
+              <span className="font-semibold text-slate-800">{publishedBoard.intactComponentsCount} available parts</span>
             </div>
           </div>
-          <button
-            onClick={() => setActiveTab('MARKETPLACE')}
-            className="px-5 py-3 rounded-2xl bg-[#1D1D1F] hover:bg-slate-800 text-white font-semibold text-xs flex items-center gap-2 shrink-0 transition-all"
-          >
-            <span>View in Marketplace</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        </div>
-      )}
 
-      {/* Main Form Grid */}
-      <form
-        onSubmit={handleSubmit}
-        className="grid grid-cols-1 lg:grid-cols-12 gap-6"
-      >
-        {/* Left Column: AI PCB Photo Auto-Scanner + Step 1 Template Selector + Step 2 Fault Picker */}
-        <div className="lg:col-span-7 space-y-6">
-          {/* LIVE GEMINI 2.5 FLASH VISION PCB PHOTO AUTO-SCANNER DROPZONE */}
-          <div className="bg-white/90 backdrop-blur-2xl border border-slate-200/80 rounded-3xl p-8 space-y-5 shadow-[0_8px_30px_rgba(15,23,42,0.05)]">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <ScanLine className="w-4 h-4 text-emerald-600" />
-                <span className="text-xs font-mono uppercase tracking-wider text-emerald-700 font-bold">
-                  Upload Real PCB Photo for Auto-BoM Scan (Gemini 2.5 Flash
-                  Vision)
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowGeminiKeyInput((prev) => !prev)}
-                className="text-[11px] font-mono px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 flex items-center gap-1.5 transition-all"
-              >
-                <KeyRound className="w-3 h-3 text-amber-600" />
-                <span>
-                  {geminiKey
-                    ? 'Gemini API Key Active ✓'
-                    : 'Configure Gemini API Key'}
-                </span>
-              </button>
-            </div>
-
-            {showGeminiKeyInput && (
-              <div className="flex items-center gap-2.5 p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
-                <input
-                  type="password"
-                  value={geminiKey}
-                  onChange={(e) => {
-                    setGeminiKey(e.target.value);
-                    saveRuntimeGeminiApiKey(e.target.value);
-                    if (e.target.value.trim().startsWith('AIza')) {
-                      setAiScanError(null);
-                    }
-                  }}
-                  placeholder="Paste VITE_GEMINI_API_KEY (AIzaSy...) for live Gemini 2.5 Flash Vision"
-                  className="flex-1 px-3.5 py-2 rounded-xl bg-white border border-slate-200 font-mono text-xs text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                />
-                <span className="font-mono text-[10px] text-slate-500">
-                  Saved
-                </span>
-              </div>
-            )}
-
-            {/* Dropzone */}
-            <div
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                const file = e.dataTransfer.files?.[0];
-                if (file) handleFileUpload(file);
-              }}
-              onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-slate-300 hover:border-emerald-500 bg-slate-50/70 rounded-3xl p-6 text-center cursor-pointer transition-all space-y-2.5"
+          <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+            <button
+              onClick={() => setActiveTab('MARKETPLACE')}
+              className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-all shadow-sm flex items-center justify-center gap-2"
             >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleFileUpload(file);
-                }}
-              />
-
-              {isScanningPhoto ? (
-                <div className="py-4 space-y-2">
-                  <ScanLine className="w-8 h-8 text-emerald-600 mx-auto animate-bounce" />
-                  <div className="font-mono text-xs text-emerald-700 font-bold">
-                    CALLING GEMINI 2.5 FLASH VISION API...
-                  </div>
-                  <p className="text-[11px] text-slate-500">
-                    Inspecting PCB silkscreen, SMD footprints &amp; package
-                    markings
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center mx-auto">
-                    <Upload className="w-5 h-5 text-emerald-600" />
-                  </div>
-                  <div className="text-sm font-medium text-[#1D1D1F]">
-                    Drop a circuit board photo here or{' '}
-                    <span className="text-emerald-600 underline font-semibold">
-                      click to upload image
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    Supports JPG, PNG, WebP • Requires{' '}
-                    <code className="font-mono text-[#1D1D1F]">
-                      VITE_GEMINI_API_KEY
-                    </code>
-                  </p>
-                </>
-              )}
-            </div>
-
-            {aiScanError && (
-              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex items-start gap-2.5 text-xs text-amber-900">
-                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <span>{aiScanError}</span>
-              </div>
-            )}
-
-            {/* AI Scan Telemetry Result Box */}
-            {lastAiScanResult && (
-              <div className="p-4 rounded-2xl bg-emerald-50/80 border border-emerald-200 flex items-start gap-3.5 text-xs">
-                {uploadedPreviewUrl && (
-                  <img
-                    src={uploadedPreviewUrl}
-                    alt="Scanned PCB"
-                    className="w-16 h-16 object-cover rounded-xl border border-emerald-300 shrink-0"
-                  />
-                )}
-                <div className="space-y-1">
-                  <div className="flex flex-wrap items-center gap-2 font-mono">
-                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-[10px]">
-                      {lastAiScanResult.scanEngine} •{' '}
-                      {lastAiScanResult.confidencePercent}% CONFIDENCE
-                    </span>
-                    <span className="text-[#1D1D1F] font-bold">
-                      {lastAiScanResult.components.length} Packages Populated
-                    </span>
-                  </div>
-                  <p className="text-slate-600 text-[11px] leading-relaxed">
-                    {lastAiScanResult.diagnosticSummary}
-                  </p>
-                </div>
-              </div>
-            )}
+              <span>View in Marketplace</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => {
+                setPublishedBoard(null);
+                setImageUrl('');
+              }}
+              className="px-6 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-all"
+            >
+              List Another Board
+            </button>
           </div>
-
-          {/* 1-Click Template Selector */}
-          <div className="bg-white/90 backdrop-blur-2xl border border-slate-200/80 rounded-3xl p-8 space-y-4 shadow-[0_8px_30px_rgba(15,23,42,0.05)]">
-            <label className="block text-xs font-mono font-semibold uppercase tracking-wider text-slate-600">
-              Step 1 • Or Pick a 1-Click Hardware Reference Template
-            </label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {BOARD_TEMPLATES.map((tpl) => {
-                const isSelected = selectedTemplateId === tpl.id;
-                return (
-                  <button
-                    type="button"
-                    key={tpl.id}
-                    onClick={() => handleSelectTemplate(tpl.id)}
-                    className={`p-4 rounded-2xl border text-left transition-all ${
-                      isSelected
-                        ? 'bg-emerald-50/80 border-emerald-500 ring-2 ring-emerald-500/20'
-                        : 'bg-slate-50/70 border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <Cpu
-                      className={`w-4 h-4 mb-2 ${
-                        isSelected ? 'text-emerald-600' : 'text-slate-400'
-                      }`}
-                    />
-                    <div className="text-xs font-semibold text-[#1D1D1F]">
-                      {tpl.templateName}
-                    </div>
-                    <div className="font-mono text-[10px] text-slate-500 mt-1">
-                      {tpl.components.length} Child Parts • ₹
-                      {tpl.defaultRawPriceInr}
-                    </div>
-                  </button>
-                );
-              })}
+        </div>
+      ) : (
+        <form onSubmit={handlePublishListing} className="space-y-8">
+          {errorMsg && (
+            <div className="flex items-center gap-2 p-4 text-xs bg-red-50 text-red-700 rounded-2xl border border-red-200">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{errorMsg}</span>
             </div>
-          </div>
+          )}
 
-          {/* Interactive Child BoM & Primary Fault Selector */}
-          <div className="bg-white/90 backdrop-blur-2xl border border-slate-200/80 rounded-3xl p-8 space-y-5 shadow-[0_8px_30px_rgba(15,23,42,0.05)]">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+          {/* STEP 1: CATEGORY, MODEL & REAL PHOTO UPLOAD */}
+          <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 space-y-6 shadow-sm">
+            <div className="flex items-center gap-2.5 pb-4 border-b border-slate-100">
+              <div className="w-7 h-7 rounded-full bg-[#1D1D1F] text-white flex items-center justify-center text-xs font-bold font-mono">
+                1
+              </div>
               <div>
-                <label className="block text-xs font-mono font-semibold uppercase tracking-wider text-slate-600">
-                  Step 2 • Click Which Component Is the Primary Fault
-                </label>
-                <p className="text-xs text-slate-500 mt-1">
-                  Click any component row to toggle it as the{' '}
-                  <span className="text-rose-600 font-semibold">
-                    🔴 Primary Fault (Dead)
-                  </span>
-                  . All other components remain{' '}
-                  <span className="text-emerald-700 font-semibold">
-                    🟢 Intact (Harvestable)
-                  </span>
-                  .
+                <h3 className="text-base font-semibold text-[#1D1D1F]">
+                  Category, Hardware Identity & Photo
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Select what kind of hardware you are listing and take/upload a clear photo
                 </p>
               </div>
-              <span className="font-mono text-xs px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-700 font-medium">
-                {bomItems.filter((i) => !i.isPrimaryFault).length} Intact / 1
-                Fault
-              </span>
             </div>
 
-            <div className="space-y-3">
-              {bomItems.map((item, idx) => {
-                const isFault = item.isPrimaryFault;
-                return (
-                  <div
-                    key={item.partNumber + idx}
-                    onClick={() => handleSetPrimaryFault(idx)}
-                    className={`p-4 rounded-2xl border transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 ${
-                      isFault
-                        ? 'bg-rose-50/70 border-rose-300 ring-1 ring-rose-300'
-                        : 'bg-slate-50/60 border-slate-200 hover:border-emerald-400'
-                    }`}
-                  >
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span
-                          className={`font-mono text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
-                            isFault
-                              ? 'bg-rose-100 text-rose-700 border-rose-200'
-                              : 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                          }`}
-                        >
-                          {isFault
-                            ? '🔴 PRIMARY FAULT'
-                            : '🟢 INTACT & HARVESTABLE'}
-                        </span>
-                        <span className="font-mono text-sm font-bold text-[#1D1D1F]">
-                          {item.partNumber}
-                        </span>
-                        <span className="font-mono text-[11px] px-2.5 py-0.5 rounded-full bg-white text-slate-600 border border-slate-200">
-                          {item.packageType} • {item.recommendedTempC}°C
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-600">{item.partName}</p>
-                      {item.bypassHackTip && !isFault && (
-                        <p className="text-[11px] text-amber-800 font-mono flex items-center gap-1 pt-0.5">
-                          <Sparkles className="w-3 h-3 shrink-0 text-amber-600" />
-                          Auto-Attached Bypass Hack: {item.bypassHackTip}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Part Price Editor */}
-                    <div
-                      onClick={(e) => e.stopPropagation()}
-                      className="flex items-center gap-2 shrink-0"
+            {/* 8 Clean Guided Categories Grid */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-2.5">
+                Select Main Category (8 Guided Options)
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                {CATALOG_CATEGORIES.map((cat) => {
+                  const isSelected = selectedCategory.id === cat.id;
+                  return (
+                    <button
+                      type="button"
+                      key={cat.id}
+                      onClick={() => setSelectedCategory(cat)}
+                      className={`p-3 rounded-2xl border text-left transition-all ${
+                        isSelected
+                          ? 'border-emerald-600 bg-emerald-50/50 shadow-sm ring-1 ring-emerald-600'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                      }`}
                     >
-                      {isFault ? (
-                        <span className="font-mono text-xs text-rose-700 font-semibold px-3 py-1 rounded-full bg-rose-100 border border-rose-200">
-                          ₹0 (Blown IC)
-                        </span>
-                      ) : (
-                        <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-sm">
-                          <span className="text-[11px] font-mono text-slate-500">
-                            Part ₹
-                          </span>
-                          <input
-                            type="number"
-                            min={1}
-                            value={item.partPriceInr}
-                            onChange={(e) =>
-                              handlePartPriceChange(idx, Number(e.target.value))
-                            }
-                            className="w-14 bg-transparent font-mono text-xs font-bold text-emerald-700 focus:outline-none"
-                          />
-                          <span className="text-[10px] font-mono text-amber-700">
-                            (+₹{item.extractionFeeInr} fee)
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+                      <span className="block text-xs font-bold text-[#1D1D1F] truncate">
+                        {cat.shortName}
+                      </span>
+                      <span className="block text-[11px] text-slate-500 line-clamp-2 mt-0.5 leading-tight">
+                        {cat.name}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        </div>
 
-        {/* Right Column: Step 3 Board Metadata, Pricing, Location & Publish */}
-        <div className="lg:col-span-5 space-y-6">
-          <div className="bg-white/90 backdrop-blur-2xl border border-slate-200/80 rounded-3xl p-8 space-y-5 shadow-[0_8px_30px_rgba(15,23,42,0.05)]">
-            <label className="block text-xs font-mono font-semibold uppercase tracking-wider text-slate-600">
-              Step 3 • Board Pricing &amp; Hyperlocal Hub Coordinates
-            </label>
-
-            <div className="space-y-4">
+            {/* Sub-Model Picker */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs text-slate-600 font-medium mb-1.5">
-                  Donor Board Listing Title *
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Specific Hardware / Sub-Model
+                </label>
+                <select
+                  value={subModel}
+                  onChange={(e) => handleSubModelSelect(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                >
+                  {selectedCategory.subModels.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Listing Title
                 </label>
                 <input
                   type="text"
                   required
                   value={boardName}
                   onChange={(e) => setBoardName(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-sm text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                  placeholder="Dead Arduino Uno R3 Board"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 />
               </div>
+            </div>
 
-              <div className="grid grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block text-xs text-slate-600 font-medium mb-1.5">
-                    Board Category
-                  </label>
-                  <select
-                    value={category}
-                    onChange={(e) =>
-                      setCategory(e.target.value as BoardCategory)
-                    }
-                    className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-mono text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                  >
-                    <option value="ACADEMIC_MAKER">ACADEMIC_MAKER</option>
-                    <option value="POWER_SMPS">POWER_SMPS</option>
-                    <option value="APPLIANCE_PCB">APPLIANCE_PCB</option>
-                    <option value="LAPTOP_MOBILE">LAPTOP_MOBILE</option>
-                  </select>
-                </div>
+            {/* Native 100% Working Photo Upload Dropzone */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                Hardware Circuit Board Photo (Optional but Recommended)
+              </label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handlePhotoSelect}
+                className="hidden"
+              />
 
-                <div>
-                  <label className="block text-xs text-slate-600 font-medium mb-1.5">
-                    Full Raw Board Price (₹ INR) *
-                  </label>
-                  <input
-                    type="number"
-                    min={10}
-                    required
-                    value={rawBoardPriceInr}
-                    onChange={(e) =>
-                      setRawBoardPriceInr(Number(e.target.value))
-                    }
-                    className="w-full px-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-sm font-mono font-bold text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+              {imageUrl ? (
+                <div className="relative rounded-2xl border border-slate-200 overflow-hidden bg-slate-50 max-h-64 flex items-center justify-center group">
+                  <img
+                    src={imageUrl}
+                    alt="Uploaded Board Preview"
+                    className="w-full h-64 object-cover object-center"
                   />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-4 py-2 bg-white text-[#1D1D1F] text-xs font-semibold rounded-xl shadow-md hover:bg-slate-100"
+                    >
+                      Change Photo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setImageUrl('')}
+                      className="p-2 bg-red-600 text-white rounded-xl shadow-md hover:bg-red-700"
+                      title="Remove Photo"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
+              ) : (
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-slate-200 hover:border-emerald-500 rounded-2xl p-6 text-center cursor-pointer bg-slate-50/50 hover:bg-emerald-50/30 transition-all space-y-2"
+                >
+                  <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
+                    {isProcessingImage ? (
+                      <div className="w-5 h-5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Camera className="w-5 h-5" />
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-xs font-semibold text-[#1D1D1F] block">
+                      Click to upload photo or take picture on mobile
+                    </span>
+                    <span className="text-[11px] text-slate-500 block">
+                      Fast client-side resize • PNG, JPG, WEBP (No API keys required)
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* STEP 2: GUIDED SUB-COMPONENT CHECKLIST & FIXED PRICE TIERS */}
+          <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 space-y-6 shadow-sm">
+            <div className="flex items-center gap-2.5 pb-4 border-b border-slate-100">
+              <div className="w-7 h-7 rounded-full bg-[#1D1D1F] text-white flex items-center justify-center text-xs font-bold font-mono">
+                2
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-[#1D1D1F]">
+                  Sub-Component Checklist & Standardized Price Tiers
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Mark what is working vs. damaged, and select standard platform price tiers
+                </p>
+              </div>
+            </div>
+
+            {/* Standardized Full Soldered Price Selector */}
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-[#1D1D1F] block">
+                    Full Soldered Assembly Price (Raw As-Is)
+                  </span>
+                  <span className="text-[11px] text-slate-500 block">
+                    Price if a buyer buys the entire dead board without desoldering
+                  </span>
+                </div>
+                <span className="text-sm font-mono font-bold text-emerald-700 bg-white px-2.5 py-1 rounded-lg border border-slate-200">
+                  ₹{rawBoardPriceInr}
+                </span>
               </div>
 
+              <div className="flex flex-wrap gap-2 pt-1">
+                {selectedCategory.rawBoardPriceTiers.map((tier) => (
+                  <button
+                    type="button"
+                    key={tier.price}
+                    onClick={() => setRawBoardPriceInr(tier.price)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-mono font-semibold transition-all ${
+                      rawBoardPriceInr === tier.price
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'bg-white border border-slate-200 text-slate-700 hover:border-slate-300'
+                    }`}
+                  >
+                    ₹{tier.price} ({tier.label})
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Sub-Components Checklist */}
+            <div className="space-y-3">
+              <label className="block text-xs font-semibold text-slate-700">
+                Sub-Components on This Board ({componentConfigs.length} Standard Components)
+              </label>
+
+              <div className="space-y-3">
+                {componentConfigs.map((comp) => {
+                  const originalOption = selectedCategory.subComponents.find(
+                    (sc) => sc.id === comp.optionId
+                  );
+                  const priceTiers = originalOption?.priceTiers || [20, 30, 40];
+
+                  return (
+                    <div
+                      key={comp.optionId}
+                      className={`p-4 rounded-2xl border transition-all space-y-3 ${
+                        comp.statusMode === 'WORKING'
+                          ? 'border-emerald-200 bg-emerald-50/20'
+                          : comp.statusMode === 'DAMAGED'
+                          ? 'border-red-200 bg-red-50/20'
+                          : 'border-slate-200 bg-slate-50/50 opacity-60'
+                      }`}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs font-bold text-[#1D1D1F]">
+                              {comp.partNumber}
+                            </span>
+                            <span className="text-[11px] text-slate-500">
+                              ({comp.packageType})
+                            </span>
+                          </div>
+                          <span className="text-xs text-slate-600 block mt-0.5">
+                            {comp.partName}
+                          </span>
+                        </div>
+
+                        {/* Status Pills */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateComponentStatus(comp.optionId, 'WORKING')
+                            }
+                            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                              comp.statusMode === 'WORKING'
+                                ? 'bg-emerald-600 text-white shadow-xs'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                          >
+                            🟢 Working
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateComponentStatus(comp.optionId, 'DAMAGED')
+                            }
+                            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                              comp.statusMode === 'DAMAGED'
+                                ? 'bg-red-600 text-white shadow-xs'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                          >
+                            🔴 Damaged
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateComponentStatus(comp.optionId, 'NOT_PRESENT')
+                            }
+                            className={`px-2 py-1 rounded-lg text-xs font-medium transition-all ${
+                              comp.statusMode === 'NOT_PRESENT'
+                                ? 'bg-slate-700 text-white'
+                                : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                            }`}
+                          >
+                            ⚪ None
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Desoldered Price Options (if working) */}
+                      {comp.statusMode === 'WORKING' && (
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+                          <span className="text-[11px] text-slate-500">
+                            Select Extracted Component Price:
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            {priceTiers.map((tierPrice) => (
+                              <button
+                                type="button"
+                                key={tierPrice}
+                                onClick={() =>
+                                  updateComponentPrice(comp.optionId, tierPrice)
+                                }
+                                className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all ${
+                                  comp.chosenPrice === tierPrice
+                                    ? 'bg-[#1D1D1F] text-white shadow-xs'
+                                    : 'bg-white border border-slate-200 text-slate-700 hover:border-slate-300'
+                                }`}
+                              >
+                                ₹{tierPrice}
+                              </button>
+                            ))}
+                            <span className="text-[10px] text-slate-400 font-mono pl-1">
+                              (+ ₹{comp.extractionFeeInr} QC Fee)
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {comp.statusMode === 'DAMAGED' && (
+                        <div className="text-[11px] text-red-600 font-medium">
+                          ⚠️ Primary Fault — Marked as ₹0 so buyers know this part is fried.
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* STEP 3: SELLER DISTRICT & PICKUP ADDRESS */}
+          <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 space-y-6 shadow-sm">
+            <div className="flex items-center gap-2.5 pb-4 border-b border-slate-100">
+              <div className="w-7 h-7 rounded-full bg-[#1D1D1F] text-white flex items-center justify-center text-xs font-bold font-mono">
+                3
+              </div>
               <div>
-                <label className="block text-xs text-slate-600 font-medium mb-1.5">
-                  Seller / Lab Name *
+                <h3 className="text-base font-semibold text-[#1D1D1F]">
+                  Seller Pickup District & Address
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Enables instant bike courier pickups (Rapido / Dunzo / Porter) for buyers in your district
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Seller / Shop / Lab Name
                 </label>
                 <input
                   type="text"
                   required
                   value={sellerName}
                   onChange={(e) => setSellerName(e.target.value)}
-                  placeholder="Enter your Name, Lab, or Repair Shop"
-                  className="w-full px-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-sm text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  placeholder="e.g. Senthil Hardware & Electronics"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 />
               </div>
 
               <div>
-                <label className="block text-xs text-slate-600 font-medium mb-1.5">
-                  Campus / Hub Location Area *
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Seller Contact Phone (10-Digits)
+                </label>
+                <div className="relative flex items-center">
+                  <span className="absolute left-3.5 text-xs font-mono text-slate-500">
+                    +91
+                  </span>
+                  <input
+                    type="tel"
+                    required
+                    maxLength={10}
+                    value={sellerPhone}
+                    onChange={(e) => setSellerPhone(e.target.value.replace(/\D/g, ''))}
+                    placeholder="9840012345"
+                    className="w-full pl-12 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  State
+                </label>
+                <select
+                  value={state}
+                  onChange={(e) => handleStateChange(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                >
+                  {INDIAN_STATES_DISTRICTS.map((s) => (
+                    <option key={s.state} value={s.state}>
+                      {s.state}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  District (Crucial for Rapido & Dunzo Matching)
+                </label>
+                <select
+                  value={district}
+                  onChange={(e) => setDistrict(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                >
+                  {availableDistricts.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Street / Shop / Campus Address
                 </label>
                 <input
                   type="text"
                   required
                   value={locationArea}
                   onChange={(e) => setLocationArea(e.target.value)}
-                  placeholder="Enter Campus, Street, and City"
-                  className="w-full px-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-sm text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  placeholder="Shop #12, Ritchie Street, Mount Road"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 />
-                {/* Quick Location Presets */}
-                <div className="flex flex-wrap gap-1.5 mt-2.5">
-                  {presetLocations.map((loc) => (
-                    <button
-                      type="button"
-                      key={loc.label}
-                      onClick={() => {
-                        setLocationArea(loc.label);
-                        setDistanceKm(loc.dist);
-                      }}
-                      className="text-[11px] font-mono px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-all"
-                    >
-                      <MapPin className="w-2.5 h-2.5 inline mr-1 text-emerald-600" />
-                      {loc.label.split(',')[0]} ({loc.dist}km)
-                    </button>
-                  ))}
-                </div>
               </div>
 
               <div>
-                <label className="block text-xs text-slate-600 font-medium mb-1.5">
-                  Distance from Buyer Hub (km) *
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Pincode
                 </label>
                 <input
-                  type="number"
-                  step="0.1"
-                  min={0.5}
+                  type="text"
                   required
-                  value={distanceKm}
-                  onChange={(e) => setDistanceKm(Number(e.target.value))}
-                  className="w-full px-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-sm font-mono text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  maxLength={6}
+                  value={pincode}
+                  onChange={(e) => setPincode(e.target.value.replace(/\D/g, ''))}
+                  placeholder="600002"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 />
               </div>
+            </div>
 
-              {/* Diagnostic Summary Box */}
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-600">
-                    Auto-Tagged Primary Fault:
-                  </span>
-                  <span className="font-mono text-rose-700 font-semibold">
-                    {faultyComponent?.partNumber}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-600">
-                    Intact Child Components:
-                  </span>
-                  <span className="font-mono text-emerald-700 font-semibold">
-                    {bomItems.filter((i) => !i.isPrimaryFault).length} Parts
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-600">
-                    Individual Harvest Sum:
-                  </span>
-                  <span className="font-mono text-emerald-700 font-bold">
-                    ₹{totalIntactPartsValue}
-                  </span>
-                </div>
+            <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                <span>Zero listing fees. 10% platform commission only upon successful order.</span>
               </div>
-
               <button
                 type="submit"
-                className="w-full py-3.5 px-5 rounded-2xl bg-[#1D1D1F] hover:bg-slate-800 text-white font-semibold text-sm flex items-center justify-center gap-2 transition-all shadow-sm"
+                className="px-8 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-md shadow-emerald-500/10 transition-all flex items-center gap-2"
               >
-                <PlusCircle className="w-4 h-4" />
-                <span>Publish Donor Board &amp; Child BoM Immediately</span>
+                <span>Publish to Marketplace</span>
+                <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </div>
-        </div>
-      </form>
+        </form>
+      )}
     </div>
   );
 };

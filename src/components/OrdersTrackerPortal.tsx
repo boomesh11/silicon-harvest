@@ -107,10 +107,11 @@ Certified by SiliconHarvest ESD & Chip-Level Salvage Network
 
   const getLogisticsMetadata = (order: Order) => {
     const tracking = order.trackingOrPorterLink?.trim();
+    const partner = order.logisticsPartner || 'Logistics Partner';
     switch (order.deliveryType) {
       case 'CAMPUS_HUB_PICKUP':
         return {
-          badge: 'CAMPUS / HUB LOCKER PICKUP (₹0)',
+          badge: `${order.logisticsPartner || 'CAMPUS HUB / SELF PICKUP'} (₹0)`,
           channel:
             tracking || 'Awaiting Campus Locker Number & Pickup Instructions',
           statusNote:
@@ -122,23 +123,49 @@ Certified by SiliconHarvest ESD & Chip-Level Salvage Network
                 : 'Ready for Campus Hub Pickup'
               : 'Picked up by buyer',
         };
+      case 'HYPERLOCAL_RAPIDO':
+        return {
+          badge: `${order.logisticsPartner || 'RAPIDO BIKE HYPERLOCAL'} (₹39)`,
+          channel: tracking || 'Awaiting Rapido Live Rider Link',
+          statusNote:
+            order.status === 'PENDING_EXTRACTION'
+              ? 'Awaiting multimeter verification before Rapido dispatch'
+              : order.status === 'READY_FOR_DISPATCH'
+              ? tracking
+                ? 'Rapido Live Rider Active'
+                : 'Ready for Rapido pickup'
+              : 'Delivered via Rapido Bike',
+        };
+      case 'HYPERLOCAL_DUNZO':
+        return {
+          badge: `${order.logisticsPartner || 'DUNZO EXPRESS HYPERLOCAL'} (₹45)`,
+          channel: tracking || 'Awaiting Dunzo Live Rider Link',
+          statusNote:
+            order.status === 'PENDING_EXTRACTION'
+              ? 'Awaiting bench test before Dunzo dispatch'
+              : order.status === 'READY_FOR_DISPATCH'
+              ? tracking
+                ? 'Dunzo Live Rider Active'
+                : 'Ready for Dunzo pickup'
+              : 'Delivered via Dunzo Express',
+        };
       case 'HYPERLOCAL_PORTER':
         return {
-          badge: 'PORTER 45-MIN HYPERLOCAL EXPRESS (₹45)',
-          channel: tracking || 'Awaiting Porter / Rapido Live Booking Link',
+          badge: `${order.logisticsPartner || 'PORTER HYPERLOCAL EXPRESS'} (₹55)`,
+          channel: tracking || 'Awaiting Porter Live Booking Link',
           statusNote:
             order.status === 'PENDING_EXTRACTION'
               ? 'Awaiting multimeter verification before rider dispatch'
               : order.status === 'READY_FOR_DISPATCH'
               ? tracking
-                ? 'Live Rider Tracking Active'
+                ? 'Live Porter Rider Active'
                 : 'Ready for Hyperlocal Rider Pickup'
-              : 'Delivered via Hyperlocal Express',
+              : 'Delivered via Porter Express',
         };
       case 'OUTSTATION_PARCEL':
         return {
-          badge: 'INDIA POST / SHIPROCKET ESD PARCEL (₹49)',
-          channel: tracking || 'Awaiting India Post / Shiprocket AWB Number',
+          badge: `${order.logisticsPartner || 'INDIA POST SPEED POST'} (₹49)`,
+          channel: tracking || 'Awaiting India Post Consignment / AWB Number',
           statusNote:
             order.status === 'PENDING_EXTRACTION'
               ? 'Awaiting IC extraction before ESD tube sealing'
@@ -147,6 +174,30 @@ Certified by SiliconHarvest ESD & Chip-Level Salvage Network
                 ? `Dispatched — AWB: ${tracking}`
                 : 'Sealed in ESD tube — awaiting AWB assignment'
               : 'Delivered to destination address',
+        };
+      case 'OUTSTATION_DELHIVERY':
+        return {
+          badge: `${order.logisticsPartner || 'DELHIVERY SURFACE EXPRESS'} (₹69)`,
+          channel: tracking || 'Awaiting Delhivery Waybill / AWB Number',
+          statusNote:
+            order.status === 'PENDING_EXTRACTION'
+              ? 'Awaiting IC extraction before Delhivery pickup'
+              : order.status === 'READY_FOR_DISPATCH'
+              ? tracking
+                ? `In Transit — Delhivery AWB: ${tracking}`
+                : 'Ready for Delhivery Courier pickup'
+              : 'Delivered by Delhivery',
+        };
+      default:
+        return {
+          badge: `${partner} (₹${order.deliveryFeeInr})`,
+          channel: tracking || 'Awaiting dispatch tracking',
+          statusNote:
+            order.status === 'PENDING_EXTRACTION'
+              ? 'Awaiting bench extraction'
+              : order.status === 'READY_FOR_DISPATCH'
+              ? 'Ready for dispatch'
+              : 'Order delivered',
         };
     }
   };
@@ -332,6 +383,25 @@ Certified by SiliconHarvest ESD & Chip-Level Salvage Network
                       <span className="text-[#1D1D1F] font-medium">
                         {order.buyerName} ({order.buyerPhone})
                       </span>
+                      {order.buyerDistrict && (
+                        <span>
+                          {' '}
+                          • District:{' '}
+                          <strong className="text-slate-700">
+                            {order.buyerDistrict}
+                            {order.buyerState ? `, ${order.buyerState}` : ''}
+                          </strong>
+                        </span>
+                      )}
+                      {order.logisticsPartner && (
+                        <span>
+                          {' '}
+                          • Logistics:{' '}
+                          <span className="px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200 font-mono text-[10px]">
+                            {order.logisticsPartner}
+                          </span>
+                        </span>
+                      )}
                     </p>
                   </div>
 
@@ -340,6 +410,9 @@ Certified by SiliconHarvest ESD & Chip-Level Salvage Network
                     <div className="text-[11px] text-slate-500">
                       ₹{order.itemPriceInr} part + ₹{order.extractionFeeInr}{' '}
                       escrow + ₹{order.deliveryFeeInr} ship
+                      {order.platformCommissionInr
+                        ? ` (₹${order.platformCommissionInr} fee)`
+                        : ''}
                     </div>
                     <div className="text-lg font-bold text-emerald-700 mt-0.5">
                       Total: ₹{order.totalPayableInr}

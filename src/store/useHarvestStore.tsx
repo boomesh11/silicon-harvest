@@ -19,6 +19,7 @@ import {
   UserProfile,
   UserRole,
   ConnectionMode,
+  SupportTicket,
 } from '../types/harvest';
 import {
   INITIAL_DONOR_BOARDS,
@@ -41,13 +42,18 @@ import {
   supabaseSignInWithEmail,
   supabaseSignUpWithEmail,
   supabaseSignInWithGoogle,
+  supabaseSendPhoneOtp,
+  supabaseVerifyPhoneOtp,
+  supabaseCreateSupportTicket,
+  supabaseFetchSupportTickets,
 } from '../services/harvestApi';
 
 const STORAGE_KEYS = {
-  BOARDS: 'silicon_harvest_prod_v1_boards',
-  COMPONENTS: 'silicon_harvest_prod_v1_components',
-  ORDERS: 'silicon_harvest_prod_v1_orders',
-  USER: 'silicon_harvest_prod_v1_user',
+  BOARDS: 'silicon_harvest_prod_v2_boards',
+  COMPONENTS: 'silicon_harvest_prod_v2_components',
+  ORDERS: 'silicon_harvest_prod_v2_orders',
+  USER: 'silicon_harvest_prod_v2_user',
+  TICKETS: 'silicon_harvest_prod_v2_tickets',
 };
 
 const LEGACY_KEYS_TO_PURGE = [
@@ -57,29 +63,45 @@ const LEGACY_KEYS_TO_PURGE = [
   'silicon_harvest_tech_wallet_v3',
   'silicon_harvest_tech_jobs_v3',
   'silicon_harvest_current_user_v3',
+  'silicon_harvest_prod_v1_boards',
+  'silicon_harvest_prod_v1_components',
+  'silicon_harvest_prod_v1_orders',
+  'silicon_harvest_prod_v1_user',
 ];
 
-const BROADCAST_CHANNEL_NAME = 'silicon_harvest_prod_v1_realtime_bus';
+const BROADCAST_CHANNEL_NAME = 'silicon_harvest_prod_v2_realtime_bus';
 
-interface PlaceOrderPayload {
+export interface PlaceOrderPayload {
   buyerName: string;
   buyerPhone: string;
   buyerAddress: string;
+  buyerState?: string;
+  buyerDistrict?: string;
+  buyerPincode?: string;
   donorBoardId: string;
   componentId: string | null;
   mode: OrderMode;
   deliveryType: DeliveryType;
+  logisticsPartner?: string;
+  platformCommissionInr?: number;
+  deliveryFeeInr?: number;
   upiUtrOrPaymentId?: string;
 }
 
-interface NewBoardListingInput {
+export interface NewBoardListingInput {
   boardName: string;
   category: BoardCategory;
+  subModel?: string;
   sellerName: string;
+  sellerPhone?: string;
+  sellerState?: string;
+  sellerDistrict?: string;
+  sellerPincode?: string;
   locationArea: string;
   distanceKm: number;
   primaryFault: string;
   rawBoardPriceInr: number;
+  imageUrl?: string;
   components: (BoardTemplateComponent & { isPrimaryFault: boolean })[];
 }
 
@@ -87,6 +109,7 @@ interface HarvestStoreContextValue {
   boards: DonorBoard[];
   components: HarvestableComponent[];
   orders: Order[];
+  supportTickets: SupportTicket[];
   techWalletBalanceInr: number;
   techCompletedJobsCount: number;
   activeTab: ActiveTab;
@@ -105,8 +128,13 @@ interface HarvestStoreContextValue {
     role: UserRole,
     organization: string,
     phone?: string,
-    defaultAddress?: string
+    defaultAddress?: string,
+    state?: string,
+    district?: string,
+    pincode?: string
   ) => Promise<{ error: string | null }>;
+  sendPhoneOtp: (phone: string) => Promise<{ error: string | null }>;
+  verifyPhoneOtp: (phone: string, token: string) => Promise<{ error: string | null }>;
   signInWithGoogle: () => Promise<{ error: string | null }>;
   signOut: () => void;
   connectionMode: ConnectionMode;
@@ -125,6 +153,14 @@ interface HarvestStoreContextValue {
   ) => void;
   updateOrderTracking: (orderId: string, trackingOrPorterLink: string) => void;
   markOrderCompleted: (orderId: string) => void;
+  createSupportTicket: (ticket: {
+    customerName: string;
+    customerPhone: string;
+    customerEmail?: string;
+    orderCode?: string;
+    category: string;
+    message: string;
+  }) => Promise<SupportTicket>;
   resetDemoState: () => void;
 }
 
@@ -145,7 +181,7 @@ function loadFromStorage<T>(key: string, fallback: T): T {
 export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  // Purge legacy v3 prototype keys on first load
+  // Purge legacy prototype keys on first load
   useEffect(() => {
     try {
       LEGACY_KEYS_TO_PURGE.forEach((k) => localStorage.removeItem(k));
@@ -162,6 +198,9 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   );
   const [orders, setOrders] = useState<Order[]>(() =>
     loadFromStorage(STORAGE_KEYS.ORDERS, INITIAL_ORDERS)
+  );
+  const [supportTickets, setSupportTickets] = useState<SupportTicket[]>(() =>
+    loadFromStorage(STORAGE_KEYS.TICKETS, [])
   );
   const [currentUser, setCurrentUser] = useState<UserProfile>(() =>
     loadFromStorage(STORAGE_KEYS.USER, DEFAULT_GUEST_PROFILE)
@@ -223,6 +262,14 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
 
   useEffect(() => {
     try {
+      localStorage.setItem(STORAGE_KEYS.TICKETS, JSON.stringify(supportTickets));
+    } catch {
+      // ignore
+    }
+  }, [supportTickets]);
+
+  useEffect(() => {
+    try {
       localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(currentUser));
     } catch {
       // ignore
@@ -248,20 +295,18 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     ch.onmessage = (ev) => {
       if (ev.data?.type === 'STATE_UPDATED') {
         setBoards(loadFromStorage(STORAGE_KEYS.BOARDS, INITIAL_DONOR_BOARDS));
-        setComponents(
-          loadFromStorage(STORAGE_KEYS.COMPONENTS, INITIAL_COMPONENTS)
-        );
+        setComponents(loadFromStorage(STORAGE_KEYS.COMPONENTS, INITIAL_COMPONENTS));
         setOrders(loadFromStorage(STORAGE_KEYS.ORDERS, INITIAL_ORDERS));
-        setRealtimeEventsCount((c) => c + 1);
+        setSupportTickets(loadFromStorage(STORAGE_KEYS.TICKETS, []));
       }
     };
 
     return () => {
       ch.close();
-      broadcastChannelRef.current = null;
     };
   }, []);
 
+  // Sync from Supabase on mount
   const refreshFromSupabase = useCallback(async () => {
     const client = getSupabaseClient();
     if (!client) {
@@ -269,36 +314,39 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       return;
     }
 
-    setIsSyncing(true);
     try {
-      const snapshot = await fetchSupabaseDataset();
+      setIsSyncing(true);
+      const [snapshot, tickets] = await Promise.all([
+        fetchSupabaseDataset(),
+        supabaseFetchSupportTickets(),
+      ]);
+
       if (snapshot) {
         setBoards(snapshot.boards);
         setComponents(snapshot.components);
         setOrders(snapshot.orders);
+        setSupportTickets(tickets);
         setConnectionMode('SUPABASE_CLOUD');
         setLastSyncError(null);
       }
     } catch (err: any) {
-      setLastSyncError(err?.message || 'Supabase sync error');
-      setConnectionMode('LOCAL_FALLBACK');
+      setLastSyncError(err?.message || 'Failed to sync with Supabase');
     } finally {
       setIsSyncing(false);
     }
   }, []);
 
-  // Subscribe to Supabase Realtime changes
+  useEffect(() => {
+    refreshFromSupabase();
+  }, [refreshFromSupabase]);
+
+  // Realtime subscription setup
   useEffect(() => {
     const client = getSupabaseClient();
-    if (!client) {
-      setConnectionMode('LOCAL_FALLBACK');
-      return;
-    }
-
-    refreshFromSupabase();
+    if (!client) return;
 
     const channel = client
-      .channel('silicon_harvest_realtime_sync')
+      .channel('public:realtime_feed')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'donor_boards' },
@@ -323,37 +371,30 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
           refreshFromSupabase();
         }
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'support_tickets' },
+        () => {
+          setRealtimeEventsCount((c) => c + 1);
+          refreshFromSupabase();
+        }
+      )
       .subscribe();
 
     return () => {
       client.removeChannel(channel);
     };
-  }, [refreshFromSupabase, connectionMode]);
+  }, [refreshFromSupabase]);
 
-  const connectSupabase = async (
-    url: string,
-    anonKey: string
-  ): Promise<boolean> => {
-    saveRuntimeSupabaseConfig(url, anonKey);
-    setIsSyncing(true);
-    setLastSyncError(null);
+  const connectSupabase = async (url: string, anonKey: string): Promise<boolean> => {
     try {
-      const snapshot = await fetchSupabaseDataset();
-      if (snapshot) {
-        setBoards(snapshot.boards);
-        setComponents(snapshot.components);
-        setOrders(snapshot.orders);
-        setConnectionMode('SUPABASE_CLOUD');
-        return true;
-      }
-      setConnectionMode('LOCAL_FALLBACK');
-      return false;
-    } catch (err: any) {
-      setLastSyncError(
-        err?.message ||
-          'Connected to Supabase URL, but tables not found yet. Run the SQL Schema in your Supabase SQL Editor.'
-      );
+      setIsSyncing(true);
+      saveRuntimeSupabaseConfig(url, anonKey);
+      await refreshFromSupabase();
       setConnectionMode('SUPABASE_CLOUD');
+      return true;
+    } catch (err: any) {
+      setLastSyncError(err?.message || 'Connection failed');
       return false;
     } finally {
       setIsSyncing(false);
@@ -363,26 +404,15 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   const disconnectSupabase = () => {
     clearRuntimeSupabaseConfig();
     setConnectionMode('LOCAL_FALLBACK');
-    setLastSyncError(null);
   };
 
-  // Switch active role without injecting fake user personas
   const switchDemoRole = (role: UserRole) => {
-    setCurrentUser((prev) => ({
-      ...prev,
-      role,
-    }));
-    if (role === 'BUYER_STUDENT') setActiveTab('MARKETPLACE');
-    if (role === 'SELLER_LAB') setActiveTab('SELLER_PORTAL');
-    if (role === 'TECH_PARTNER') setActiveTab('TECH_WORKBENCH');
+    setCurrentUser((prev) => ({ ...prev, role }));
   };
 
   const updateUserProfile = (updates: Partial<UserProfile>) => {
     setCurrentUser((prev) => {
       const updated = { ...prev, ...updates };
-      if (updates.role === 'BUYER_STUDENT') setActiveTab('MARKETPLACE');
-      if (updates.role === 'SELLER_LAB') setActiveTab('SELLER_PORTAL');
-      if (updates.role === 'TECH_PARTNER') setActiveTab('TECH_WORKBENCH');
       return updated;
     });
   };
@@ -402,7 +432,10 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     role: UserRole,
     organization: string,
     phone = '',
-    defaultAddress = ''
+    defaultAddress = '',
+    state = 'Tamil Nadu',
+    district = 'Chennai',
+    pincode = '600001'
   ) => {
     const { profile, error } = await supabaseSignUpWithEmail({
       email,
@@ -412,7 +445,22 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       organization,
       phone,
       defaultAddress,
+      state,
+      district,
+      pincode,
     });
+    if (profile) {
+      setCurrentUser(profile);
+    }
+    return { error };
+  };
+
+  const sendPhoneOtp = async (phone: string) => {
+    return supabaseSendPhoneOtp(phone);
+  };
+
+  const verifyPhoneOtp = async (phone: string, token: string) => {
+    const { profile, error } = await supabaseVerifyPhoneOtp(phone, token);
     if (profile) {
       setCurrentUser(profile);
     }
@@ -439,12 +487,26 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       ? components.find((c) => c.id === payload.componentId) || null
       : null;
 
-    const deliveryFeeInr =
-      payload.deliveryType === 'CAMPUS_HUB_PICKUP'
-        ? 0
-        : payload.deliveryType === 'HYPERLOCAL_PORTER'
-        ? 45
-        : 49;
+    const isSameDistrict =
+      (payload.buyerDistrict || 'Chennai').toLowerCase().trim() ===
+      (targetBoard.sellerDistrict || 'Chennai').toLowerCase().trim();
+
+    let deliveryFeeInr = payload.deliveryFeeInr;
+    if (deliveryFeeInr === undefined) {
+      if (payload.deliveryType === 'CAMPUS_HUB_PICKUP') {
+        deliveryFeeInr = 0;
+      } else if (payload.deliveryType === 'HYPERLOCAL_RAPIDO') {
+        deliveryFeeInr = 39;
+      } else if (payload.deliveryType === 'HYPERLOCAL_DUNZO') {
+        deliveryFeeInr = 45;
+      } else if (payload.deliveryType === 'HYPERLOCAL_PORTER') {
+        deliveryFeeInr = 55;
+      } else if (payload.deliveryType === 'OUTSTATION_DELHIVERY') {
+        deliveryFeeInr = 69;
+      } else {
+        deliveryFeeInr = isSameDistrict ? 45 : 49;
+      }
+    }
 
     const itemPriceInr =
       payload.mode === 'RAW_DONOR_BOARD'
@@ -460,7 +522,11 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         ? targetComp.extractionFeeInr
         : 0;
 
-    const totalPayableInr = itemPriceInr + extractionFeeInr + deliveryFeeInr;
+    const platformCommissionInr =
+      payload.platformCommissionInr ??
+      Math.max(10, Math.round((itemPriceInr + extractionFeeInr) * 0.1));
+
+    const totalPayableInr = itemPriceInr + extractionFeeInr + platformCommissionInr + deliveryFeeInr;
     const orderNum = 2040 + orders.length + 1;
     const orderCode = `SH-ORD-${orderNum}`;
 
@@ -470,13 +536,18 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       buyerName: payload.buyerName,
       buyerPhone: payload.buyerPhone,
       buyerAddress: payload.buyerAddress,
+      buyerState: payload.buyerState || 'Tamil Nadu',
+      buyerDistrict: payload.buyerDistrict || 'Chennai',
+      buyerPincode: payload.buyerPincode || '600001',
       donorBoardId: payload.donorBoardId,
       componentId: payload.componentId,
       mode: payload.mode,
       deliveryType: payload.deliveryType,
+      logisticsPartner: payload.logisticsPartner || 'RAPIDO',
       itemPriceInr,
       extractionFeeInr,
       deliveryFeeInr,
+      platformCommissionInr,
       totalPayableInr,
       status:
         payload.mode === 'RAW_DONOR_BOARD'
@@ -484,10 +555,11 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
           : 'PENDING_EXTRACTION',
       multimeterReadingValue:
         payload.mode === 'RAW_DONOR_BOARD'
-          ? 'As-Is Raw Donor Board (Bypass / Self-Salvage)'
+          ? 'As-Is Raw Donor Assembly (Bypass / Self-Salvage)'
           : '',
       trackingOrPorterLink: '',
       upiUtrOrPaymentId: payload.upiUtrOrPaymentId || '',
+      paymentUtr: payload.upiUtrOrPaymentId || '',
       createdAt: new Date().toISOString(),
     };
 
@@ -537,13 +609,18 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         buyerName: payload.buyerName,
         buyerPhone: payload.buyerPhone,
         buyerAddress: payload.buyerAddress,
+        buyerState: payload.buyerState,
+        buyerDistrict: payload.buyerDistrict,
+        buyerPincode: payload.buyerPincode,
         donorBoardId: payload.donorBoardId,
         componentId: payload.componentId,
         mode: payload.mode,
         deliveryType: payload.deliveryType,
+        logisticsPartner: payload.logisticsPartner,
         itemPriceInr,
         extractionFeeInr,
         deliveryFeeInr,
+        platformCommissionInr,
         totalPayableInr,
         upiUtrOrPaymentId: payload.upiUtrOrPaymentId,
       })
@@ -559,23 +636,28 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     const newBoardId = `BRD-${nextBoardNumber}`;
 
     const intactCount = input.components.filter((c) => !c.isPrimaryFault).length;
-    const city = input.locationArea.toLowerCase().includes('bengaluru')
-      ? 'Bengaluru'
-      : 'Chennai';
+    const district = input.sellerDistrict || 'Chennai';
 
     const newBoard: DonorBoard = {
       id: newBoardId,
       boardName: input.boardName,
       category: input.category,
+      subModel: input.subModel,
       sellerName: input.sellerName,
-      locationCity: city,
+      sellerPhone: input.sellerPhone,
+      sellerState: input.sellerState || 'Tamil Nadu',
+      sellerDistrict: district,
+      sellerPincode: input.sellerPincode || '600001',
+      locationCity: district,
       locationArea: input.locationArea,
       distanceKm: input.distanceKm,
       primaryFault: input.primaryFault,
       rawBoardPriceInr: input.rawBoardPriceInr,
+      imageUrl: input.imageUrl,
       status: 'AVAILABLE',
       totalComponentsCount: input.components.length,
       intactComponentsCount: intactCount,
+      createdAt: new Date().toISOString(),
     };
 
     const newChildComponents: HarvestableComponent[] = input.components.map(
@@ -620,7 +702,7 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
 
     const finalReading =
       multimeterReading.trim() ||
-      '3.30V / 0.51V Diode Drop Verified — Passed Load Check';
+      '3.30V / 0.51V Diode Drop Verified — Passed Multimeter Load Check';
 
     setOrders((prev) =>
       prev.map((o) =>
@@ -685,6 +767,20 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  const createSupportTicket = async (ticket: {
+    customerName: string;
+    customerPhone: string;
+    customerEmail?: string;
+    orderCode?: string;
+    category: string;
+    message: string;
+  }): Promise<SupportTicket> => {
+    const newTicket = await supabaseCreateSupportTicket(ticket);
+    setSupportTickets((prev) => [newTicket, ...prev]);
+    broadcastLocalStateUpdate();
+    return newTicket;
+  };
+
   const resetDemoState = () => {
     try {
       Object.values(STORAGE_KEYS).forEach((key) => localStorage.removeItem(key));
@@ -695,6 +791,7 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     setBoards(INITIAL_DONOR_BOARDS);
     setComponents(INITIAL_COMPONENTS);
     setOrders(INITIAL_ORDERS);
+    setSupportTickets([]);
     setCurrentUser(DEFAULT_GUEST_PROFILE);
     broadcastLocalStateUpdate();
   };
@@ -705,6 +802,7 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         boards,
         components,
         orders,
+        supportTickets,
         techWalletBalanceInr,
         techCompletedJobsCount,
         activeTab,
@@ -714,6 +812,8 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         updateUserProfile,
         signInWithEmail,
         signUpWithEmail,
+        sendPhoneOtp,
+        verifyPhoneOtp,
         signInWithGoogle,
         signOut,
         connectionMode,
@@ -728,6 +828,7 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         completeExtractionJob,
         updateOrderTracking,
         markOrderCompleted,
+        createSupportTicket,
         resetDemoState,
       }}
     >

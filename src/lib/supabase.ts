@@ -12,6 +12,7 @@ import {
   OrderMode,
   DeliveryType,
   OrderStatus,
+  SupportTicket,
 } from '../types/harvest';
 
 const RUNTIME_URL_KEY = 'silicon_harvest_supabase_url';
@@ -91,13 +92,18 @@ export function getSupabaseClient(): SupabaseClient | null {
 
 // Snake_case DB row -> CamelCase TypeScript interfaces
 export function mapDbBoardToBoard(row: Record<string, any>): DonorBoard {
-  const area = String(row.location_area || 'Guindy Campus');
-  const city = String(row.location_city || 'Chennai');
+  const area = String(row.location_area || 'Central District');
+  const city = String(row.location_city || row.seller_district || 'Chennai');
   return {
     id: String(row.id),
     boardName: String(row.board_name),
-    category: (row.category as BoardCategory) || 'ACADEMIC_MAKER',
-    sellerName: String(row.seller_name || 'Campus / Hub Seller'),
+    category: (row.category as BoardCategory) || 'IC_MICROCONTROLLERS',
+    subModel: row.sub_model ? String(row.sub_model) : undefined,
+    sellerName: String(row.seller_name || 'Verified Donor / Lab'),
+    sellerPhone: row.seller_phone ? String(row.seller_phone) : undefined,
+    sellerState: String(row.seller_state || 'Tamil Nadu'),
+    sellerDistrict: String(row.seller_district || 'Chennai'),
+    sellerPincode: String(row.seller_pincode || '600001'),
     locationCity: city,
     locationArea: area.toLowerCase().includes(city.toLowerCase())
       ? area
@@ -106,8 +112,10 @@ export function mapDbBoardToBoard(row: Record<string, any>): DonorBoard {
     primaryFault: String(row.primary_fault),
     rawBoardPriceInr: Number(row.raw_board_price_inr ?? 0),
     status: (row.status as BoardStatus) || 'AVAILABLE',
+    imageUrl: row.image_url ? String(row.image_url) : undefined,
     totalComponentsCount: Number(row.total_components_count ?? 0),
     intactComponentsCount: Number(row.intact_components_count ?? 0),
+    createdAt: String(row.created_at || new Date().toISOString()),
   };
 }
 
@@ -137,22 +145,26 @@ export function mapDbOrderToOrder(row: Record<string, any>): Order {
     buyerName: String(row.buyer_name),
     buyerPhone: String(row.buyer_phone),
     buyerAddress: String(row.buyer_address),
+    buyerState: row.buyer_state ? String(row.buyer_state) : 'Tamil Nadu',
+    buyerDistrict: row.buyer_district ? String(row.buyer_district) : 'Chennai',
+    buyerPincode: row.buyer_pincode ? String(row.buyer_pincode) : '600001',
     donorBoardId: String(row.donor_board_id),
     componentId: row.component_id ? String(row.component_id) : null,
     mode: (row.mode as OrderMode) || 'EXTRACTED_TESTED_PART',
     deliveryType: (row.delivery_type as DeliveryType) || 'CAMPUS_HUB_PICKUP',
+    logisticsPartner: row.logistics_partner ? String(row.logistics_partner) : 'RAPIDO',
     itemPriceInr: Number(row.item_price_inr ?? 0),
     extractionFeeInr: Number(row.extraction_fee_inr ?? 0),
     deliveryFeeInr: Number(row.delivery_fee_inr ?? 0),
+    platformCommissionInr: Number(row.platform_commission_inr ?? 10),
     totalPayableInr: Number(row.total_payable_inr ?? 0),
     status: (row.status as OrderStatus) || 'PENDING_EXTRACTION',
     multimeterReadingValue: String(row.multimeter_reading_value || ''),
     trackingOrPorterLink: row.tracking_or_porter_link
       ? String(row.tracking_or_porter_link)
       : '',
-    upiUtrOrPaymentId: row.upi_utr_or_payment_id
-      ? String(row.upi_utr_or_payment_id)
-      : '',
+    upiUtrOrPaymentId: row.payment_utr || row.upi_utr_or_payment_id || '',
+    paymentUtr: row.payment_utr ? String(row.payment_utr) : undefined,
     createdAt: String(row.created_at || new Date().toISOString()),
   };
 }
@@ -161,12 +173,30 @@ export function mapDbProfileToProfile(row: Record<string, any>): UserProfile {
   return {
     id: String(row.id),
     email: String(row.email || ''),
-    fullName: String(row.full_name || ''),
+    fullName: String(row.full_name || 'Customer'),
     role: (row.role as UserRole) || 'BUYER_STUDENT',
     organization: String(row.organization || ''),
     phone: String(row.phone || ''),
     defaultAddress: String(row.default_address || ''),
+    state: row.state ? String(row.state) : 'Tamil Nadu',
+    district: row.district ? String(row.district) : 'Chennai',
+    pincode: row.pincode ? String(row.pincode) : '600001',
     walletBalanceInr: Number(row.wallet_balance_inr ?? 0),
-    isSupabaseAuthenticated: Boolean(row.auth_user_id),
+    isSupabaseAuthenticated: true,
+  };
+}
+
+export function mapDbTicketToTicket(row: Record<string, any>): SupportTicket {
+  return {
+    id: String(row.id),
+    ticketCode: String(row.ticket_code),
+    customerName: String(row.customer_name),
+    customerPhone: String(row.customer_phone),
+    customerEmail: row.customer_email ? String(row.customer_email) : undefined,
+    orderCode: row.order_code ? String(row.order_code) : undefined,
+    category: String(row.category),
+    message: String(row.message),
+    status: (row.status as any) || 'OPEN',
+    createdAt: String(row.created_at || new Date().toISOString()),
   };
 }

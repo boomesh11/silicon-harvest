@@ -4,6 +4,7 @@ import {
   mapDbComponentToComponent,
   mapDbOrderToOrder,
   mapDbProfileToProfile,
+  mapDbTicketToTicket,
 } from '../lib/supabase';
 import {
   DonorBoard,
@@ -15,17 +16,21 @@ import {
   BoardTemplateComponent,
   OrderMode,
   DeliveryType,
+  SupportTicket,
 } from '../types/harvest';
 
-// Clean default unauthenticated profile (zero fake demo personas)
+// Clean default unauthenticated guest profile
 export const DEFAULT_GUEST_PROFILE: UserProfile = {
-  id: 'USR-LOCAL',
+  id: 'USR-GUEST',
   email: '',
   fullName: '',
   role: 'BUYER_STUDENT',
   organization: '',
   phone: '',
   defaultAddress: '',
+  state: 'Tamil Nadu',
+  district: 'Chennai',
+  pincode: '600001',
   walletBalanceInr: 0,
   isSupabaseAuthenticated: false,
 };
@@ -102,13 +107,18 @@ export async function supabasePlaceSalvageOrder(params: {
   buyerName: string;
   buyerPhone: string;
   buyerAddress: string;
+  buyerState?: string;
+  buyerDistrict?: string;
+  buyerPincode?: string;
   donorBoardId: string;
   componentId: string | null;
   mode: OrderMode;
   deliveryType: DeliveryType;
+  logisticsPartner?: string;
   itemPriceInr: number;
   extractionFeeInr: number;
   deliveryFeeInr: number;
+  platformCommissionInr?: number;
   totalPayableInr: number;
   upiUtrOrPaymentId?: string;
 }): Promise<Order | null> {
@@ -136,12 +146,24 @@ export async function supabasePlaceSalvageOrder(params: {
 
   if (!data) return null;
 
+  // Enrich order with district, logistics partner, platform commission and payment UTR
+  const enrichPayload: Record<string, any> = {};
+  if (params.buyerState) enrichPayload.buyer_state = params.buyerState;
+  if (params.buyerDistrict) enrichPayload.buyer_district = params.buyerDistrict;
+  if (params.buyerPincode) enrichPayload.buyer_pincode = params.buyerPincode;
+  if (params.logisticsPartner) enrichPayload.logistics_partner = params.logisticsPartner;
+  if (params.platformCommissionInr !== undefined) enrichPayload.platform_commission_inr = params.platformCommissionInr;
   if (params.upiUtrOrPaymentId) {
+    enrichPayload.payment_utr = params.upiUtrOrPaymentId;
+    enrichPayload.upi_utr_or_payment_id = params.upiUtrOrPaymentId;
+  }
+
+  if (Object.keys(enrichPayload).length > 0) {
     await client
       .from('orders')
-      .update({ upi_utr_or_payment_id: params.upiUtrOrPaymentId })
+      .update(enrichPayload)
       .eq('id', data.id);
-    data.upi_utr_or_payment_id = params.upiUtrOrPaymentId;
+    Object.assign(data, enrichPayload);
   }
 
   return mapDbOrderToOrder(data);
@@ -153,31 +175,42 @@ export async function supabasePlaceSalvageOrder(params: {
 export async function supabasePublishDonorBoard(input: {
   boardName: string;
   category: BoardCategory;
+  subModel?: string;
   sellerName: string;
+  sellerPhone?: string;
+  sellerState?: string;
+  sellerDistrict?: string;
+  sellerPincode?: string;
   locationArea: string;
   distanceKm: number;
   primaryFault: string;
   rawBoardPriceInr: number;
+  imageUrl?: string;
   components: (BoardTemplateComponent & { isPrimaryFault: boolean })[];
 }): Promise<{ board: DonorBoard; components: HarvestableComponent[] } | null> {
   const client = getSupabaseClient();
   if (!client) return null;
 
   const intactCount = input.components.filter((c) => !c.isPrimaryFault).length;
-  const city = input.locationArea.toLowerCase().includes('bengaluru')
-    ? 'Bengaluru'
-    : 'Chennai';
+  const district = input.sellerDistrict || 'Chennai';
+  const state = input.sellerState || 'Tamil Nadu';
 
   const { data: boardRow, error: boardErr } = await client
     .from('donor_boards')
     .insert({
       board_name: input.boardName,
       category: input.category,
+      sub_model: input.subModel || null,
       seller_name: input.sellerName,
+      seller_phone: input.sellerPhone || null,
+      seller_state: state,
+      seller_district: district,
+      seller_pincode: input.sellerPincode || '600001',
       primary_fault: input.primaryFault,
       raw_board_price_inr: input.rawBoardPriceInr,
       status: 'AVAILABLE',
-      location_city: city,
+      image_url: input.imageUrl || null,
+      location_city: district,
       location_area: input.locationArea,
       distance_km: input.distanceKm,
       total_components_count: input.components.length,
@@ -279,6 +312,83 @@ export async function supabaseMarkOrderCompleted(orderId: string): Promise<void>
 }
 
 /**
+ * Customer Support Tickets: Insert & List
+ */
+export async function supabaseCreateSupportTicket(params: {
+  customerName: string;
+  customerPhone: string;
+  customerEmail?: string;
+  orderCode?: string;
+  category: string;
+  message: string;
+}): Promise<SupportTicket> {
+  const client = getSupabaseClient();
+  const ticketCode = `SUP-${Math.floor(1000 + Math.random() * 9000)}`;
+  const now = new Date().toISOString();
+
+  if (!client) {
+    return {
+      id: `LOCAL-SUP-${Date.now()}`,
+      ticketCode,
+      customerName: params.customerName,
+      customerPhone: params.customerPhone,
+      customerEmail: params.customerEmail,
+      orderCode: params.orderCode,
+      category: params.category,
+      message: params.message,
+      status: 'OPEN',
+      createdAt: now,
+    };
+  }
+
+  const { data, error } = await client
+    .from('support_tickets')
+    .insert({
+      ticket_code: ticketCode,
+      customer_name: params.customerName,
+      customer_phone: params.customerPhone,
+      customer_email: params.customerEmail || null,
+      order_code: params.orderCode || null,
+      category: params.category,
+      message: params.message,
+      status: 'OPEN',
+    })
+    .select('*')
+    .single();
+
+  if (error || !data) {
+    // Graceful fallback to local ticket representation
+    return {
+      id: `LOCAL-SUP-${Date.now()}`,
+      ticketCode,
+      customerName: params.customerName,
+      customerPhone: params.customerPhone,
+      customerEmail: params.customerEmail,
+      orderCode: params.orderCode,
+      category: params.category,
+      message: params.message,
+      status: 'OPEN',
+      createdAt: now,
+    };
+  }
+
+  return mapDbTicketToTicket(data);
+}
+
+export async function supabaseFetchSupportTickets(): Promise<SupportTicket[]> {
+  const client = getSupabaseClient();
+  if (!client) return [];
+
+  const { data, error } = await client
+    .from('support_tickets')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error || !data) return [];
+  return data.map(mapDbTicketToTicket);
+}
+
+/**
  * Supabase Auth Sign-In with Email & Password
  */
 export async function supabaseSignInWithEmail(
@@ -287,10 +397,7 @@ export async function supabaseSignInWithEmail(
 ): Promise<{ profile: UserProfile | null; error: string | null }> {
   const client = getSupabaseClient();
   if (!client) {
-    return {
-      profile: null,
-      error: 'Supabase connection is not configured yet. Connect your Supabase project or onboard your profile in the Profile Setup tab.',
-    };
+    return { profile: null, error: 'Database service unavailable' };
   }
 
   const { data, error } = await client.auth.signInWithPassword({
@@ -322,6 +429,9 @@ export async function supabaseSignInWithEmail(
       organization: meta.organization || '',
       phone: meta.phone || '',
       defaultAddress: meta.default_address || '',
+      state: meta.state || 'Tamil Nadu',
+      district: meta.district || 'Chennai',
+      pincode: meta.pincode || '600001',
       walletBalanceInr: 0,
       isSupabaseAuthenticated: true,
     },
@@ -330,7 +440,7 @@ export async function supabaseSignInWithEmail(
 }
 
 /**
- * Supabase Auth Sign-Up with Email, Password, Role, Phone & Campus Address
+ * Supabase Auth Sign-Up with Email, Password, Role, Phone & Location
  */
 export async function supabaseSignUpWithEmail(params: {
   email: string;
@@ -340,13 +450,13 @@ export async function supabaseSignUpWithEmail(params: {
   organization: string;
   phone: string;
   defaultAddress: string;
+  state?: string;
+  district?: string;
+  pincode?: string;
 }): Promise<{ profile: UserProfile | null; error: string | null }> {
   const client = getSupabaseClient();
   if (!client) {
-    return {
-      profile: null,
-      error: 'Supabase connection is not configured yet. Connect your Supabase project or onboard your profile in the Profile Setup tab.',
-    };
+    return { profile: null, error: 'Database service unavailable' };
   }
 
   const { data, error } = await client.auth.signUp({
@@ -359,6 +469,9 @@ export async function supabaseSignUpWithEmail(params: {
         organization: params.organization,
         phone: params.phone,
         default_address: params.defaultAddress,
+        state: params.state || 'Tamil Nadu',
+        district: params.district || 'Chennai',
+        pincode: params.pincode || '600001',
       },
     },
   });
@@ -378,6 +491,9 @@ export async function supabaseSignUpWithEmail(params: {
         organization: params.organization,
         phone: params.phone,
         default_address: params.defaultAddress,
+        state: params.state || 'Tamil Nadu',
+        district: params.district || 'Chennai',
+        pincode: params.pincode || '600001',
       },
       { onConflict: 'email' }
     )
@@ -397,6 +513,58 @@ export async function supabaseSignUpWithEmail(params: {
       organization: params.organization,
       phone: params.phone,
       defaultAddress: params.defaultAddress,
+      state: params.state || 'Tamil Nadu',
+      district: params.district || 'Chennai',
+      pincode: params.pincode || '600001',
+      walletBalanceInr: 0,
+      isSupabaseAuthenticated: true,
+    },
+    error: null,
+  };
+}
+
+/**
+ * Mobile OTP Sign-in via Supabase
+ */
+export async function supabaseSendPhoneOtp(phone: string): Promise<{ error: string | null }> {
+  const client = getSupabaseClient();
+  if (!client) return { error: 'Database service unavailable' };
+
+  const formattedPhone = phone.startsWith('+') ? phone : `+91${phone.replace(/\D/g, '')}`;
+  const { error } = await client.auth.signInWithOtp({
+    phone: formattedPhone,
+  });
+
+  return { error: error ? error.message : null };
+}
+
+export async function supabaseVerifyPhoneOtp(phone: string, token: string): Promise<{ profile: UserProfile | null; error: string | null }> {
+  const client = getSupabaseClient();
+  if (!client) return { profile: null, error: 'Database service unavailable' };
+
+  const formattedPhone = phone.startsWith('+') ? phone : `+91${phone.replace(/\D/g, '')}`;
+  const { data, error } = await client.auth.verifyOtp({
+    phone: formattedPhone,
+    token: token.trim(),
+    type: 'sms',
+  });
+
+  if (error || !data.user) {
+    return { profile: null, error: error?.message || 'OTP verification failed' };
+  }
+
+  return {
+    profile: {
+      id: data.user.id,
+      email: data.user.email || `${phone}@phone.siliconharvest.in`,
+      fullName: `User ${phone.slice(-4)}`,
+      role: 'BUYER_STUDENT',
+      organization: '',
+      phone: formattedPhone,
+      defaultAddress: '',
+      state: 'Tamil Nadu',
+      district: 'Chennai',
+      pincode: '600001',
       walletBalanceInr: 0,
       isSupabaseAuthenticated: true,
     },
@@ -412,9 +580,7 @@ export async function supabaseSignInWithGoogle(): Promise<{
 }> {
   const client = getSupabaseClient();
   if (!client) {
-    return {
-      error: 'Supabase connection is not configured yet. Configure your Supabase project URL & Anon Key first.',
-    };
+    return { error: 'Database service unavailable' };
   }
 
   const { error } = await client.auth.signInWithOAuth({

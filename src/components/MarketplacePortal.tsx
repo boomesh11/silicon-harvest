@@ -23,6 +23,7 @@ import {
 } from '../types/harvest';
 import { InspectionCheckoutModal } from './InspectionCheckoutModal';
 import { DatasheetPinoutModal } from './DatasheetPinoutModal';
+import { CATALOG_CATEGORIES, CatalogCategory } from '../data/catalogPricing';
 
 export const MarketplacePortal: React.FC = () => {
   const { boards, components, setActiveTab } = useHarvestStore();
@@ -147,10 +148,10 @@ export const MarketplacePortal: React.FC = () => {
 
   const categoryOptions: { id: BoardCategory | 'ALL'; label: string }[] = [
     { id: 'ALL', label: 'All Categories' },
-    { id: 'ACADEMIC_MAKER', label: 'Academic & Maker' },
-    { id: 'POWER_SMPS', label: 'Power & SMPS' },
-    { id: 'APPLIANCE_PCB', label: '3D Printer & Appliance' },
-    { id: 'LAPTOP_MOBILE', label: 'Laptop & Compute' },
+    ...CATALOG_CATEGORIES.map((c: CatalogCategory) => ({
+      id: c.id as BoardCategory,
+      label: `${c.icon} ${c.shortName || c.name}`,
+    })),
   ];
 
   const difficultyOptions: {
@@ -362,7 +363,15 @@ export const MarketplacePortal: React.FC = () => {
                   <div className="space-y-5">
                     {/* Clean Hardware Thumbnail Preview Header */}
                     <div className="relative h-32 rounded-2xl bg-gradient-to-br from-slate-50 via-slate-100/70 to-emerald-50/40 border border-slate-200/80 p-4 flex flex-col justify-between overflow-hidden">
-                      <div className="absolute -right-6 -bottom-6 w-28 h-28 rounded-full bg-emerald-400/15 blur-2xl group-hover:bg-emerald-400/25 transition-all" />
+                      {parentBoard.imageUrl ? (
+                        <img
+                          src={parentBoard.imageUrl}
+                          alt={parentBoard.boardName}
+                          className="absolute inset-0 w-full h-full object-cover opacity-25 group-hover:opacity-40 transition-opacity"
+                        />
+                      ) : (
+                        <div className="absolute -right-6 -bottom-6 w-28 h-28 rounded-full bg-emerald-400/15 blur-2xl group-hover:bg-emerald-400/25 transition-all" />
+                      )}
 
                       <div className="relative z-10 flex items-center justify-between gap-2">
                         <span className="font-mono text-xs px-2.5 py-1 rounded-full bg-white text-slate-700 border border-slate-200 shadow-sm">
@@ -426,7 +435,9 @@ export const MarketplacePortal: React.FC = () => {
                         <span className="flex items-center gap-1.5 truncate">
                           <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                           <span className="truncate">
-                            {parentBoard.locationArea}
+                            {parentBoard.sellerDistrict
+                              ? `${parentBoard.sellerDistrict}, ${parentBoard.sellerState || ''}`
+                              : parentBoard.locationArea}
                           </span>
                         </span>
                         <span className="font-mono text-xs text-slate-700 font-medium shrink-0 ml-2">
@@ -565,6 +576,20 @@ export const MarketplacePortal: React.FC = () => {
                 className="bg-white/90 backdrop-blur-2xl border border-slate-200/80 hover:border-slate-300 hover:-translate-y-1 hover:scale-[1.01] rounded-3xl p-8 flex flex-col justify-between transition-all duration-300 cursor-pointer shadow-[0_8px_30px_rgba(15,23,42,0.05)] hover:shadow-[0_16px_40px_rgba(15,23,42,0.09)]"
               >
                 <div className="space-y-4">
+                  {board.imageUrl && (
+                    <div className="relative h-44 rounded-2xl overflow-hidden border border-slate-200/80 mb-3 bg-slate-100">
+                      <img
+                        src={board.imageUrl}
+                        alt={board.boardName}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
+                      <span className="absolute bottom-2.5 left-3 px-2.5 py-0.5 rounded-full bg-black/60 backdrop-blur-md text-white text-[11px] font-mono">
+                        Verified Donor PCB Photo
+                      </span>
+                    </div>
+                  )}
+
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
@@ -645,7 +670,11 @@ export const MarketplacePortal: React.FC = () => {
                 <div className="mt-6 pt-5 border-t border-slate-200/80 flex flex-wrap items-center justify-between gap-3">
                   <div className="text-xs text-slate-600 flex items-center gap-1.5">
                     <MapPin className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>{board.locationArea}</span>
+                    <span>
+                      {board.sellerDistrict
+                        ? `${board.sellerDistrict}, ${board.sellerState || ''}`
+                        : board.locationArea}
+                    </span>
                     <span className="font-mono text-slate-800 font-medium">
                       ({board.distanceKm} km)
                     </span>
