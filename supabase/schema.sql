@@ -25,14 +25,20 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 CREATE TABLE IF NOT EXISTS public.donor_boards (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   board_name TEXT NOT NULL,
-  category TEXT NOT NULL CHECK (category IN ('ACADEMIC_MAKER', 'POWER_SMPS', 'APPLIANCE_PCB', 'LAPTOP_MOBILE')),
+  category TEXT NOT NULL,
   seller_name TEXT NOT NULL DEFAULT '',
+  seller_phone TEXT NOT NULL DEFAULT '',
+  seller_state TEXT NOT NULL DEFAULT '',
+  seller_district TEXT NOT NULL DEFAULT '',
+  seller_pincode TEXT NOT NULL DEFAULT '',
+  sub_model TEXT NOT NULL DEFAULT '',
   primary_fault TEXT NOT NULL,
   raw_board_price_inr NUMERIC(10, 2) NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'AVAILABLE' CHECK (status IN ('AVAILABLE', 'PARTIALLY_HARVESTED', 'SOLD_RAW')),
   location_city TEXT NOT NULL DEFAULT 'Chennai',
   location_area TEXT NOT NULL,
   distance_km NUMERIC(6, 2) NOT NULL DEFAULT 2.5,
+  image_url TEXT,
   total_components_count INTEGER NOT NULL DEFAULT 0,
   intact_components_count INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -62,10 +68,15 @@ CREATE TABLE IF NOT EXISTS public.orders (
   buyer_name TEXT NOT NULL,
   buyer_phone TEXT NOT NULL,
   buyer_address TEXT NOT NULL,
+  buyer_state TEXT DEFAULT '',
+  buyer_district TEXT DEFAULT '',
+  buyer_pincode TEXT DEFAULT '',
   donor_board_id UUID NOT NULL REFERENCES public.donor_boards(id) ON DELETE CASCADE,
   component_id UUID REFERENCES public.harvestable_components(id) ON DELETE SET NULL,
   mode TEXT NOT NULL CHECK (mode IN ('RAW_DONOR_BOARD', 'EXTRACTED_TESTED_PART')),
-  delivery_type TEXT NOT NULL CHECK (delivery_type IN ('CAMPUS_HUB_PICKUP', 'HYPERLOCAL_PORTER', 'OUTSTATION_PARCEL')),
+  delivery_type TEXT NOT NULL,
+  logistics_partner TEXT DEFAULT '',
+  platform_commission_inr NUMERIC(10, 2) NOT NULL DEFAULT 0,
   item_price_inr NUMERIC(10, 2) NOT NULL DEFAULT 0,
   extraction_fee_inr NUMERIC(10, 2) NOT NULL DEFAULT 0,
   delivery_fee_inr NUMERIC(10, 2) NOT NULL DEFAULT 0,
@@ -74,6 +85,22 @@ CREATE TABLE IF NOT EXISTS public.orders (
   multimeter_reading_value TEXT DEFAULT '',
   tracking_or_porter_link TEXT DEFAULT '',
   upi_utr_or_payment_id TEXT DEFAULT '',
+  payment_utr TEXT DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 5. SUPPORT TICKETS TABLE
+CREATE TABLE IF NOT EXISTS public.support_tickets (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  ticket_code TEXT NOT NULL UNIQUE,
+  user_name TEXT NOT NULL,
+  user_phone TEXT NOT NULL,
+  user_email TEXT NOT NULL,
+  order_code TEXT DEFAULT '',
+  category TEXT NOT NULL,
+  urgency TEXT NOT NULL DEFAULT 'MEDIUM',
+  message TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'OPEN',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -194,6 +221,7 @@ ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.donor_boards ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.harvestable_components ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.support_tickets ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Public read/write profiles" ON public.profiles;
 CREATE POLICY "Public read/write profiles" ON public.profiles FOR ALL USING (true) WITH CHECK (true);
@@ -207,6 +235,10 @@ CREATE POLICY "Public read/write harvestable_components" ON public.harvestable_c
 DROP POLICY IF EXISTS "Public read/write orders" ON public.orders;
 CREATE POLICY "Public read/write orders" ON public.orders FOR ALL USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Public read/write support_tickets" ON public.support_tickets;
+CREATE POLICY "Public read/write support_tickets" ON public.support_tickets FOR ALL USING (true) WITH CHECK (true);
+
 ALTER PUBLICATION supabase_realtime ADD TABLE public.donor_boards;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.harvestable_components;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.orders;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.support_tickets;
