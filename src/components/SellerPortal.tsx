@@ -271,31 +271,31 @@ export const SellerPortal: React.FC = () => {
   };
 
   return (
-    <div className="pt-24 pb-20 px-4 sm:px-6 max-w-5xl mx-auto space-y-8 animate-in fade-in duration-300">
+    <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-300">
       {/* Hero Header */}
       <div className="text-center space-y-2">
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold">
           <Tag className="w-3.5 h-3.5" />
           <span>Consumer Hardware Salvage Listing</span>
         </div>
-        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#1D1D1F]">
-          List Dead Circuit Boards & Salvage Parts
+        <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-[#1D1D1F]">
+          List Dead Circuit Boards &amp; Salvage Parts
         </h1>
-        <p className="text-slate-500 text-sm max-w-xl mx-auto">
+        <p className="text-slate-500 text-xs sm:text-sm max-w-xl mx-auto">
           Choose from standardized categories, toggle working components, and set fixed price tiers. Local buyers in {district} can order within 45 minutes!
         </p>
       </div>
 
       {publishedBoard ? (
-        <div className="bg-white rounded-3xl border border-emerald-200 p-8 text-center space-y-5 shadow-xl shadow-emerald-500/5 animate-in zoom-in-95 duration-200">
+        <div className="bg-white rounded-3xl border border-emerald-200 p-6 sm:p-8 text-center space-y-5 shadow-xl shadow-emerald-500/5 animate-in zoom-in-95 duration-200">
           <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
             <CheckCircle2 className="w-8 h-8" />
           </div>
           <div className="space-y-1">
-            <h2 className="text-2xl font-bold text-[#1D1D1F]">
+            <h2 className="text-xl sm:text-2xl font-bold text-[#1D1D1F]">
               Listing Published Successfully!
             </h2>
-            <p className="text-sm text-slate-500 font-mono">
+            <p className="text-xs sm:text-sm text-slate-500 font-mono">
               Board ID: {publishedBoard.id} • {publishedBoard.boardName}
             </p>
           </div>
@@ -318,7 +318,7 @@ export const SellerPortal: React.FC = () => {
           <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
             <button
               onClick={() => setActiveTab('MARKETPLACE')}
-              className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-all shadow-sm flex items-center justify-center gap-2"
+              className="min-h-[44px] px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold active:scale-95 transition-all shadow-sm flex items-center justify-center gap-2"
             >
               <span>View in Marketplace</span>
               <ArrowRight className="w-4 h-4" />
@@ -328,7 +328,7 @@ export const SellerPortal: React.FC = () => {
                 setPublishedBoard(null);
                 setImageUrl('');
               }}
-              className="px-6 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-all"
+              className="min-h-[44px] px-6 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold active:scale-95 transition-all"
             >
               List Another Board
             </button>
@@ -344,14 +344,14 @@ export const SellerPortal: React.FC = () => {
           )}
 
           {/* STEP 1: CATEGORY, MODEL & REAL PHOTO UPLOAD */}
-          <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 space-y-6 shadow-sm">
+          <div className="bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-8 space-y-6 shadow-sm">
             <div className="flex items-center gap-2.5 pb-4 border-b border-slate-100">
               <div className="w-7 h-7 rounded-full bg-[#1D1D1F] text-white flex items-center justify-center text-xs font-bold font-mono">
                 1
               </div>
               <div>
                 <h3 className="text-base font-semibold text-[#1D1D1F]">
-                  Category, Hardware Identity & Photo
+                  Category, Hardware Identity &amp; Photo
                 </h3>
                 <p className="text-xs text-slate-500">
                   Select what kind of hardware you are listing and take/upload a clear photo
@@ -372,7 +372,7 @@ export const SellerPortal: React.FC = () => {
                       type="button"
                       key={cat.id}
                       onClick={() => setSelectedCategory(cat)}
-                      className={`p-3 rounded-2xl border text-left transition-all ${
+                      className={`min-h-[64px] p-3 rounded-2xl border text-left active:scale-95 transition-all ${
                         isSelected
                           ? 'border-emerald-600 bg-emerald-50/50 shadow-sm ring-1 ring-emerald-600'
                           : 'border-slate-200 hover:border-slate-300 bg-white'
@@ -399,7 +399,7 @@ export const SellerPortal: React.FC = () => {
                 <select
                   value={subModel}
                   onChange={(e) => handleSubModelSelect(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  className="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-medium text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 >
                   {selectedCategory.subModels.map((m) => (
                     <option key={m} value={m}>
@@ -419,7 +419,7 @@ export const SellerPortal: React.FC = () => {
                   value={boardName}
                   onChange={(e) => setBoardName(e.target.value)}
                   placeholder="Dead Arduino Uno R3 Board"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  className="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-medium text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 />
               </div>
             </div>
@@ -449,14 +449,14 @@ export const SellerPortal: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="px-4 py-2 bg-white text-[#1D1D1F] text-xs font-semibold rounded-xl shadow-md hover:bg-slate-100"
+                      className="min-h-[44px] px-4 py-2 bg-white text-[#1D1D1F] text-xs font-semibold rounded-xl shadow-md hover:bg-slate-100 active:scale-95 transition-all"
                     >
                       Change Photo
                     </button>
                     <button
                       type="button"
                       onClick={() => setImageUrl('')}
-                      className="p-2 bg-red-600 text-white rounded-xl shadow-md hover:bg-red-700"
+                      className="min-h-[44px] min-w-[44px] p-2 bg-red-600 text-white rounded-xl shadow-md hover:bg-red-700 active:scale-95 transition-all flex items-center justify-center"
                       title="Remove Photo"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -466,21 +466,21 @@ export const SellerPortal: React.FC = () => {
               ) : (
                 <div
                   onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-slate-200 hover:border-emerald-500 rounded-2xl p-6 text-center cursor-pointer bg-slate-50/50 hover:bg-emerald-50/30 transition-all space-y-2"
+                  className="border-2 border-dashed border-slate-200 hover:border-emerald-500 rounded-2xl py-8 px-6 text-center cursor-pointer bg-slate-50/50 hover:bg-emerald-50/30 active:scale-98 transition-all space-y-2"
                 >
-                  <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
+                  <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
                     {isProcessingImage ? (
                       <div className="w-5 h-5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
                     ) : (
-                      <Camera className="w-5 h-5" />
+                      <Camera className="w-6 h-6" />
                     )}
                   </div>
                   <div>
-                    <span className="text-xs font-semibold text-[#1D1D1F] block">
+                    <span className="text-xs sm:text-sm font-semibold text-[#1D1D1F] block">
                       Click to upload photo or take picture on mobile
                     </span>
-                    <span className="text-[11px] text-slate-500 block">
-                      Fast client-side resize • PNG, JPG, WEBP (No API keys required)
+                    <span className="text-[11px] text-slate-500 block mt-0.5">
+                      Fast client-side resize • PNG, JPG, WEBP (Zero API keys required)
                     </span>
                   </div>
                 </div>
@@ -690,7 +690,7 @@ export const SellerPortal: React.FC = () => {
                   value={sellerName}
                   onChange={(e) => setSellerName(e.target.value)}
                   placeholder="e.g. Senthil Hardware & Electronics"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  className="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-medium text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 />
               </div>
 
@@ -709,7 +709,7 @@ export const SellerPortal: React.FC = () => {
                     value={sellerPhone}
                     onChange={(e) => setSellerPhone(e.target.value.replace(/\D/g, ''))}
                     placeholder="9840012345"
-                    className="w-full pl-12 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    className="w-full min-h-[44px] pl-12 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-mono text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                   />
                 </div>
               </div>
@@ -723,7 +723,7 @@ export const SellerPortal: React.FC = () => {
                 <select
                   value={state}
                   onChange={(e) => handleStateChange(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  className="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-medium text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 >
                   {INDIAN_STATES_DISTRICTS.map((s) => (
                     <option key={s.state} value={s.state}>
@@ -740,7 +740,7 @@ export const SellerPortal: React.FC = () => {
                 <select
                   value={district}
                   onChange={(e) => setDistrict(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  className="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 >
                   {availableDistricts.map((d) => (
                     <option key={d} value={d}>
@@ -762,7 +762,7 @@ export const SellerPortal: React.FC = () => {
                   value={locationArea}
                   onChange={(e) => setLocationArea(e.target.value)}
                   placeholder="Shop #12, Ritchie Street, Mount Road"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  className="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-medium text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 />
               </div>
 
@@ -777,19 +777,19 @@ export const SellerPortal: React.FC = () => {
                   value={pincode}
                   onChange={(e) => setPincode(e.target.value.replace(/\D/g, ''))}
                   placeholder="600002"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  className="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-mono text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 />
               </div>
             </div>
 
-            <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-1.5 text-xs text-slate-500 text-center sm:text-left">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
                 <span>Zero listing fees. 10% platform commission only upon successful order.</span>
               </div>
               <button
                 type="submit"
-                className="px-8 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-md shadow-emerald-500/10 transition-all flex items-center gap-2"
+                className="w-full sm:w-auto min-h-[48px] px-8 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-md shadow-emerald-500/10 active:scale-95 transition-all flex items-center justify-center gap-2"
               >
                 <span>Publish to Marketplace</span>
                 <ArrowRight className="w-4 h-4" />

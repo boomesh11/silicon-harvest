@@ -11,13 +11,13 @@ import { OrdersTrackerPortal } from './components/OrdersTrackerPortal';
 import { ImpactAnalyticsPortal } from './components/ImpactAnalyticsPortal';
 import { SupportContactPortal } from './components/SupportContactPortal';
 import { LoginPage } from './components/LoginPage';
-import { Leaf, ShieldCheck, Flame, Layers, HelpCircle, Truck } from 'lucide-react';
+import { Leaf, ShieldCheck, Layers, HelpCircle, Truck } from 'lucide-react';
 
 const MainShell: React.FC = () => {
   const { activeTab, setActiveTab } = useHarvestStore();
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F5F5F7] text-[#1D1D1F] relative overflow-hidden">
+    <div className="min-h-screen flex flex-col bg-[#F5F5F7] text-[#1D1D1F] relative overflow-x-hidden w-full m-0 p-0">
       {/* Subtle Ambient Daylight Pastel Glow Orbs */}
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
         <div className="absolute -top-48 left-1/2 -translate-x-1/2 w-[780px] h-[420px] bg-emerald-400/15 rounded-full blur-[140px]" />
@@ -27,7 +27,7 @@ const MainShell: React.FC = () => {
 
       <Header />
 
-      <main className="relative flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-20">
+      <main className="relative flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-20 sm:pt-28 pb-16 sm:pb-20">
         {activeTab === 'LOGIN' && <LoginPage />}
         {activeTab === 'MARKETPLACE' && <MarketplacePortal />}
         {activeTab === 'SELLER_PORTAL' && <SellerPortal />}
@@ -37,36 +37,39 @@ const MainShell: React.FC = () => {
         {activeTab === 'SUPPORT_CONTACT' && <SupportContactPortal />}
       </main>
 
-      <footer className="relative border-t border-slate-200/80 bg-white/80 backdrop-blur-xl py-8">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <div className="flex items-center gap-2.5">
-            <Leaf className="w-4 h-4 text-emerald-600" />
+      <footer className="relative border-t border-slate-200/80 bg-white/80 backdrop-blur-xl py-6 sm:py-8">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-500 text-center sm:text-left">
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5">
+            <div className="w-6 h-6 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center shrink-0">
+              <Leaf className="w-3.5 h-3.5 text-emerald-600" />
+            </div>
             <span className="text-[#1D1D1F] font-semibold tracking-tight">
               SiliconHarvest
             </span>
             <span>• Managed Semiconductor Recovery &amp; Supply</span>
           </div>
-          <div className="flex flex-wrap items-center gap-6">
+
+          <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 text-xs">
             <span className="flex items-center gap-1.5 text-slate-600">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
               Multimeter QC Guaranteed
             </span>
             <span className="flex items-center gap-1.5 text-slate-600">
-              <Truck className="w-3.5 h-3.5 text-sky-600" />
+              <Truck className="w-3.5 h-3.5 text-sky-600 shrink-0" />
               District Hyperlocal &amp; India Post
             </span>
             <button
               onClick={() => setActiveTab('SUPPORT_CONTACT')}
-              className="flex items-center gap-1.5 text-slate-700 hover:text-emerald-700 font-medium transition-colors"
+              className="min-h-[38px] flex items-center gap-1.5 text-slate-700 hover:text-emerald-700 font-medium transition-colors active:scale-95"
             >
-              <HelpCircle className="w-3.5 h-3.5 text-emerald-600" />
+              <HelpCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
               Support &amp; Helpdesk
             </button>
             <button
               onClick={() => setActiveTab('ESG_ANALYTICS')}
-              className="flex items-center gap-1.5 text-slate-700 hover:text-emerald-700 font-medium transition-colors"
+              className="min-h-[38px] flex items-center gap-1.5 text-slate-700 hover:text-emerald-700 font-medium transition-colors active:scale-95"
             >
-              <Layers className="w-3.5 h-3.5 text-emerald-600" />
+              <Layers className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
               ESG Telemetry
             </button>
           </div>

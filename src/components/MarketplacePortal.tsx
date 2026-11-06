@@ -252,22 +252,22 @@ export const MarketplacePortal: React.FC = () => {
         </p>
 
         {/* Floating Frosted Glass Search & Filter Console */}
-        <div className="max-w-4xl mx-auto pt-4 space-y-4">
+        <div className="max-w-4xl mx-auto pt-4 space-y-3 sm:space-y-4">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            {/* Search Input */}
+            {/* Search Input (16px on mobile prevents auto-zoom) */}
             <div className="relative flex-1">
-              <Search className="w-4 h-4 text-slate-400 absolute left-5 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-slate-400 absolute left-4 sm:left-5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search IC part number (e.g. AMS1117-3.3, CH340G, ATMEGA328P), package (SOT-223, DIP-28), or donor board..."
-                className="w-full pl-12 pr-20 py-3.5 rounded-full bg-white/90 backdrop-blur-2xl border border-slate-200 hover:border-slate-300 text-sm text-[#1D1D1F] placeholder:text-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                placeholder="Search IC part number, package, or board..."
+                className="w-full pl-11 pr-20 py-3 sm:py-3.5 min-h-[44px] rounded-full bg-white/90 backdrop-blur-2xl border border-slate-200 hover:border-slate-300 text-base sm:text-sm text-[#1D1D1F] placeholder:text-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 font-mono text-xs px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-xs px-2.5 py-1 min-h-[32px] rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 active:scale-95 transition-all"
                 >
                   CLEAR
                 </button>
@@ -275,44 +275,44 @@ export const MarketplacePortal: React.FC = () => {
             </div>
 
             {/* Segmented Pill View Mode Switcher */}
-            <div className="bg-white/90 p-1 rounded-full border border-slate-200/80 shadow-sm flex items-center shrink-0 self-center">
+            <div className="bg-white/90 p-1 rounded-full border border-slate-200/80 shadow-sm flex items-center justify-center shrink-0 self-center w-full sm:w-auto">
               <button
                 onClick={() => setViewMode('COMPONENT_VIEW')}
-                className={`flex items-center gap-1.5 px-4 py-2.5 rounded-full text-xs font-medium transition-all ${
+                className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 min-h-[40px] rounded-full text-xs font-medium active:scale-95 transition-all ${
                   viewMode === 'COMPONENT_VIEW'
                     ? 'bg-[#1D1D1F] text-white font-semibold shadow-sm'
                     : 'text-slate-600 hover:text-[#1D1D1F]'
                 }`}
               >
                 <Cpu className="w-3.5 h-3.5" />
-                <span>Component View ({filteredComponents.length})</span>
+                <span>Components ({filteredComponents.length})</span>
               </button>
               <button
                 onClick={() => setViewMode('BOARD_VIEW')}
-                className={`flex items-center gap-1.5 px-4 py-2.5 rounded-full text-xs font-medium transition-all ${
+                className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 min-h-[40px] rounded-full text-xs font-medium active:scale-95 transition-all ${
                   viewMode === 'BOARD_VIEW'
                     ? 'bg-[#1D1D1F] text-white font-semibold shadow-sm'
                     : 'text-slate-600 hover:text-[#1D1D1F]'
                 }`}
               >
                 <Layers className="w-3.5 h-3.5" />
-                <span>Donor Board View ({filteredBoards.length})</span>
+                <span>Donor Boards ({filteredBoards.length})</span>
               </button>
             </div>
           </div>
 
-          {/* Segmented Pill Filter Bars */}
-          <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
-            {/* Category Pills */}
-            <div className="bg-white/80 p-1 rounded-full border border-slate-200/80 shadow-sm flex flex-wrap items-center gap-1">
+          {/* Segmented Pill Filter Bars with Mobile Horizontal Momentum Swipe Strip */}
+          <div className="space-y-2 pt-1">
+            {/* Category Swipe Strip */}
+            <div className="w-full overflow-x-auto no-scrollbar flex items-center gap-1.5 py-1 px-0.5">
               {categoryOptions.map((cat) => (
                 <button
                   key={cat.id}
                   onClick={() => setSelectedCategory(cat.id)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                  className={`shrink-0 px-3.5 py-1.5 min-h-[38px] rounded-full text-xs font-medium whitespace-nowrap active:scale-95 transition-all ${
                     selectedCategory === cat.id
-                      ? 'bg-[#1D1D1F] text-white shadow-sm'
-                      : 'text-slate-600 hover:text-[#1D1D1F]'
+                      ? 'bg-[#1D1D1F] text-white shadow-sm font-semibold'
+                      : 'bg-white/80 border border-slate-200/80 text-slate-600 hover:text-[#1D1D1F]'
                   }`}
                 >
                   {cat.label}
@@ -320,16 +320,16 @@ export const MarketplacePortal: React.FC = () => {
               ))}
             </div>
 
-            {/* Difficulty & Proximity Pills */}
-            <div className="bg-white/80 p-1 rounded-full border border-slate-200/80 shadow-sm flex flex-wrap items-center gap-1">
+            {/* Difficulty & Proximity Strip */}
+            <div className="w-full overflow-x-auto no-scrollbar flex items-center gap-1.5 py-1 px-0.5">
               {difficultyOptions.map((tier) => (
                 <button
                   key={tier.id}
                   onClick={() => setSelectedDifficulty(tier.id)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                  className={`shrink-0 px-3.5 py-1.5 min-h-[38px] rounded-full text-xs font-medium whitespace-nowrap active:scale-95 transition-all ${
                     selectedDifficulty === tier.id
-                      ? 'bg-[#1D1D1F] text-white shadow-sm'
-                      : 'text-slate-600 hover:text-[#1D1D1F]'
+                      ? 'bg-[#1D1D1F] text-white shadow-sm font-semibold'
+                      : 'bg-white/80 border border-slate-200/80 text-slate-600 hover:text-[#1D1D1F]'
                   }`}
                 >
                   {tier.label}
@@ -338,13 +338,13 @@ export const MarketplacePortal: React.FC = () => {
 
               <button
                 onClick={() => setHyperlocalOnly((prev) => !prev)}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all ${
+                className={`shrink-0 flex items-center gap-1.5 px-3.5 py-1.5 min-h-[38px] rounded-full text-xs font-medium whitespace-nowrap active:scale-95 transition-all ${
                   hyperlocalOnly
                     ? 'bg-emerald-600 text-white font-semibold shadow-sm'
-                    : 'text-slate-600 hover:text-[#1D1D1F]'
+                    : 'bg-white/80 border border-slate-200/80 text-slate-600 hover:text-[#1D1D1F]'
                 }`}
               >
-                <MapPin className="w-3 h-3" />
+                <MapPin className="w-3.5 h-3.5" />
                 <span>&lt; 15 km Hyperlocal</span>
               </button>
             </div>
@@ -515,7 +515,7 @@ export const MarketplacePortal: React.FC = () => {
                           mode: 'EXTRACTED_TESTED_PART',
                         });
                       }}
-                      className="w-full py-3 px-4 rounded-2xl bg-[#1D1D1F] hover:bg-slate-800 text-white font-medium text-xs flex items-center justify-between transition-all shadow-sm"
+                      className="w-full min-h-[44px] py-3 px-4 rounded-2xl bg-[#1D1D1F] hover:bg-slate-800 text-white font-medium text-xs flex items-center justify-between active:scale-95 transition-all shadow-sm"
                     >
                       <span className="flex items-center gap-1.5 font-semibold">
                         <Flame className="w-3.5 h-3.5 text-amber-400" />
@@ -536,9 +536,9 @@ export const MarketplacePortal: React.FC = () => {
                           mode: 'RAW_DONOR_BOARD',
                         });
                       }}
-                      className={`w-full py-3 px-4 rounded-2xl text-xs flex items-center justify-between border transition-all ${
+                      className={`w-full min-h-[44px] py-3 px-4 rounded-2xl text-xs flex items-center justify-between border transition-all ${
                         isRawAvailable
-                          ? 'bg-slate-100/80 hover:bg-slate-200/70 text-[#1D1D1F] border-slate-200/90'
+                          ? 'bg-slate-100/80 hover:bg-slate-200/70 text-[#1D1D1F] border-slate-200/90 active:scale-95'
                           : 'bg-slate-50 text-slate-400 border-slate-200/50 cursor-not-allowed'
                       }`}
                     >
@@ -563,7 +563,7 @@ export const MarketplacePortal: React.FC = () => {
                         e.stopPropagation();
                         toggleCartItem(comp.id);
                       }}
-                      className={`w-full py-2.5 px-4 rounded-2xl text-xs font-medium flex items-center justify-center gap-1.5 border transition-all ${
+                      className={`w-full min-h-[44px] py-2.5 px-4 rounded-2xl text-xs font-medium flex items-center justify-center gap-1.5 border active:scale-95 transition-all ${
                         bulkCartIds.includes(comp.id)
                           ? 'bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold'
                           : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
@@ -617,7 +617,7 @@ export const MarketplacePortal: React.FC = () => {
         </div>
       ) : (
         /* VIEW 2: DONOR BOARD BENTO GRID */
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
           {filteredBoards.map((board) => {
             const childComps = components.filter(
               (c) => c.donorBoardId === board.id
@@ -640,7 +640,7 @@ export const MarketplacePortal: React.FC = () => {
                       : 'EXTRACTED_TESTED_PART',
                   })
                 }
-                className="bg-white/90 backdrop-blur-2xl border border-slate-200/80 hover:border-slate-300 hover:-translate-y-1 hover:scale-[1.01] rounded-3xl p-8 flex flex-col justify-between transition-all duration-300 cursor-pointer shadow-[0_8px_30px_rgba(15,23,42,0.05)] hover:shadow-[0_16px_40px_rgba(15,23,42,0.09)]"
+                className="bg-white/90 backdrop-blur-2xl border border-slate-200/80 hover:border-slate-300 hover:-translate-y-1 hover:scale-[1.01] rounded-3xl p-6 sm:p-8 flex flex-col justify-between transition-all duration-300 cursor-pointer shadow-[0_8px_30px_rgba(15,23,42,0.05)] hover:shadow-[0_16px_40px_rgba(15,23,42,0.09)]"
               >
                 <div className="space-y-4">
                   {board.imageUrl && (
@@ -747,7 +747,7 @@ export const MarketplacePortal: React.FC = () => {
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -757,7 +757,7 @@ export const MarketplacePortal: React.FC = () => {
                           mode: 'EXTRACTED_TESTED_PART',
                         });
                       }}
-                      className="px-4 py-2 rounded-full bg-slate-100 hover:bg-slate-200 text-[#1D1D1F] border border-slate-200 text-xs font-medium flex items-center gap-1.5 transition-all"
+                      className="flex-1 sm:flex-none min-h-[44px] px-4 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200 text-[#1D1D1F] border border-slate-200 text-xs font-medium flex items-center justify-center gap-1.5 active:scale-95 transition-all"
                     >
                       <Eye className="w-3.5 h-3.5 text-emerald-600" />
                       <span>Inspect PCB Map</span>
@@ -773,7 +773,7 @@ export const MarketplacePortal: React.FC = () => {
                           mode: 'RAW_DONOR_BOARD',
                         });
                       }}
-                      className={`px-4 py-2 rounded-full font-mono text-xs font-semibold transition-all ${
+                      className={`flex-1 sm:flex-none min-h-[44px] px-4 py-2.5 rounded-full font-mono text-xs font-semibold active:scale-95 transition-all ${
                         isRawAvailable
                           ? 'bg-[#1D1D1F] hover:bg-slate-800 text-white'
                           : 'bg-slate-100 text-slate-400 cursor-not-allowed'
@@ -896,9 +896,10 @@ export const MarketplacePortal: React.FC = () => {
           bundledShippingInr;
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-md">
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-md overflow-hidden animate-in fade-in duration-200">
+            <div className="bg-white rounded-t-3xl sm:rounded-3xl border-t sm:border border-slate-200 shadow-2xl w-full max-w-xl overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[90vh] animate-in slide-in-from-bottom duration-300">
+              <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto my-2 sm:hidden shrink-0" />
+              <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-slate-100 bg-slate-50 shrink-0">
                 <div>
                   <h3 className="text-base font-semibold text-[#1D1D1F]">
                     Bulk Component Cart Checkout ({bulkCartComponents.length}{' '}
@@ -912,13 +913,13 @@ export const MarketplacePortal: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowBulkCartModal(false)}
-                  className="p-1.5 rounded-full hover:bg-slate-200 text-slate-500"
+                  className="min-h-[44px] min-w-[44px] rounded-full hover:bg-slate-200 text-slate-500 flex items-center justify-center active:scale-95 transition-all"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="p-6 overflow-y-auto space-y-4">
+              <div className="p-5 sm:p-6 overflow-y-auto space-y-4">
                 <div className="space-y-2">
                   {bulkCartComponents.map((c) => {
                     const b = boardMap.get(c.donorBoardId);
@@ -954,7 +955,7 @@ export const MarketplacePortal: React.FC = () => {
                       type="text"
                       value={bulkBuyerName}
                       onChange={(e) => setBulkBuyerName(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs"
+                      className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border border-slate-200 text-base sm:text-xs text-[#1D1D1F] focus:outline-none"
                     />
                   </div>
                   <div>
@@ -964,7 +965,7 @@ export const MarketplacePortal: React.FC = () => {
                     <select
                       value={bulkBuyerDistrict}
                       onChange={(e) => setBulkBuyerDistrict(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium"
+                      className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border border-slate-200 text-base sm:text-xs font-medium text-[#1D1D1F] focus:outline-none"
                     >
                       {(
                         INDIAN_STATES_DISTRICTS[0]?.districts || [
@@ -1039,7 +1040,7 @@ export const MarketplacePortal: React.FC = () => {
                     setShowBulkCartModal(false);
                     setActiveTab('ORDERS_TRACKER');
                   }}
-                  className="w-full py-3 rounded-2xl bg-[#1D1D1F] hover:bg-slate-800 text-white font-semibold text-xs transition-all"
+                  className="w-full min-h-[48px] py-3 rounded-2xl bg-[#1D1D1F] hover:bg-slate-800 text-white font-semibold text-xs active:scale-95 transition-all"
                 >
                   Confirm Bulk Cart Order (₹{grandTotalInr}) →
                 </button>

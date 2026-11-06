@@ -220,7 +220,7 @@ export const TechWorkbenchPortal: React.FC = () => {
               return (
                 <div
                   key={job.id}
-                  className="bg-white/95 backdrop-blur-2xl border border-amber-200 rounded-3xl p-8 space-y-5 shadow-[0_8px_30px_rgba(15,23,42,0.06)]"
+                  className="bg-white/95 backdrop-blur-2xl border border-amber-200 rounded-3xl p-5 sm:p-8 space-y-5 shadow-[0_8px_30px_rgba(15,23,42,0.06)]"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div className="space-y-1.5">
@@ -305,7 +305,7 @@ export const TechWorkbenchPortal: React.FC = () => {
                             handleReadingChange(job.id, e.target.value)
                           }
                           placeholder="e.g. 3.31V DC verified / 0.48V Diode Drop Pass"
-                          className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 font-mono text-xs text-emerald-800 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                          className="w-full min-h-[44px] px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 font-mono text-base sm:text-xs text-emerald-800 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                         />
                         <div className="flex flex-wrap items-center gap-2 pt-0.5">
                           <span className="text-[10px] font-mono text-slate-500">
@@ -320,7 +320,7 @@ export const TechWorkbenchPortal: React.FC = () => {
                               type="button"
                               key={preset}
                               onClick={() => handleReadingChange(job.id, preset)}
-                              className="text-[10px] font-mono px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-all"
+                              className="text-[10px] font-mono px-2.5 py-1 min-h-[30px] rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 active:scale-95 transition-all"
                             >
                               {preset}
                             </button>
@@ -347,7 +347,7 @@ export const TechWorkbenchPortal: React.FC = () => {
                               ? 'Enter India Post / Shiprocket AWB Tracking Number'
                               : 'Enter Campus Locker Number & Pickup Instructions'
                           }
-                          className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 font-mono text-xs text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
+                          className="w-full min-h-[44px] px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 font-mono text-base sm:text-xs text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
                         />
                         <p className="text-[10px] font-mono text-slate-500">
                           Saved directly to{' '}
@@ -364,7 +364,7 @@ export const TechWorkbenchPortal: React.FC = () => {
                         onClick={() =>
                           handleVerifyAndDispatch(job.id, defaultPresetReading)
                         }
-                        className="w-full sm:w-auto py-3.5 px-6 rounded-2xl bg-[#1D1D1F] hover:bg-slate-800 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-sm"
+                        className="w-full sm:w-auto min-h-[48px] py-3.5 px-6 rounded-2xl bg-[#1D1D1F] hover:bg-slate-800 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 active:scale-95 transition-all shadow-sm"
                       >
                         <ShieldCheck className="w-4 h-4 text-emerald-400" />
                         <span>
