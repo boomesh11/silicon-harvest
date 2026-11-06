@@ -12,6 +12,10 @@ import {
   Lock,
   BookOpen,
   PlusCircle,
+  ShoppingBag,
+  Check,
+  X,
+  Truck,
 } from 'lucide-react';
 import { useHarvestStore } from '../store/useHarvestStore';
 import {
@@ -23,10 +27,15 @@ import {
 } from '../types/harvest';
 import { InspectionCheckoutModal } from './InspectionCheckoutModal';
 import { DatasheetPinoutModal } from './DatasheetPinoutModal';
-import { CATALOG_CATEGORIES, CatalogCategory } from '../data/catalogPricing';
+import {
+  CATALOG_CATEGORIES,
+  CatalogCategory,
+  INDIAN_STATES_DISTRICTS,
+} from '../data/catalogPricing';
 
 export const MarketplacePortal: React.FC = () => {
-  const { boards, components, setActiveTab } = useHarvestStore();
+  const { boards, components, setActiveTab, placeOrder, currentUser } =
+    useHarvestStore();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<
@@ -38,6 +47,39 @@ export const MarketplacePortal: React.FC = () => {
   const [hyperlocalOnly, setHyperlocalOnly] = useState(false);
   const [viewMode, setViewMode] = useState<'COMPONENT_VIEW' | 'BOARD_VIEW'>(
     'COMPONENT_VIEW'
+  );
+
+  // Bulk Component Cart state
+  const [bulkCartIds, setBulkCartIds] = useState<string[]>([]);
+  const [showBulkCartModal, setShowBulkCartModal] = useState(false);
+  const [bulkBuyerDistrict, setBulkBuyerDistrict] = useState(
+    currentUser.district || 'Chennai'
+  );
+  const [bulkBuyerName, setBulkBuyerName] = useState(
+    currentUser.fullName || 'Laptop Service Lab'
+  );
+  const [bulkBuyerPhone, setBulkBuyerPhone] = useState(
+    currentUser.phone ? currentUser.phone.replace(/\D/g, '').slice(-10) : '9840012345'
+  );
+  const [bulkBuyerAddress, setBulkBuyerAddress] = useState(
+    currentUser.defaultAddress || 'Shop #14, Ritchie Street, Chennai'
+  );
+  const [bulkUtr, setBulkUtr] = useState('429104829104');
+
+  const toggleCartItem = (compId: string) => {
+    setBulkCartIds((prev) =>
+      prev.includes(compId)
+        ? prev.filter((id) => id !== compId)
+        : [...prev, compId]
+    );
+  };
+
+  const bulkCartComponents = useMemo(
+    () =>
+      components.filter(
+        (c) => bulkCartIds.includes(c.id) && c.status === 'INTACT'
+      ),
+    [components, bulkCartIds]
   );
 
   // Checkout Modal state
@@ -514,6 +556,31 @@ export const MarketplacePortal: React.FC = () => {
                           : 'Partially Harvested'}
                       </span>
                     </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleCartItem(comp.id);
+                      }}
+                      className={`w-full py-2.5 px-4 rounded-2xl text-xs font-medium flex items-center justify-center gap-1.5 border transition-all ${
+                        bulkCartIds.includes(comp.id)
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold'
+                          : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
+                      }`}
+                    >
+                      {bulkCartIds.includes(comp.id) ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>In Bulk Cart (Click to Remove)</span>
+                        </>
+                      ) : (
+                        <>
+                          <ShoppingBag className="w-3.5 h-3.5 text-slate-500" />
+                          <span>+ Add to Bulk Component Cart</span>
+                        </>
+                      )}
+                    </button>
                   </div>
                 </div>
               );
@@ -751,6 +818,236 @@ export const MarketplacePortal: React.FC = () => {
           }}
         />
       )}
+
+      {/* Floating Bulk Salvage Cart Bar */}
+      {bulkCartComponents.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-2xl bg-[#1D1D1F] text-white rounded-3xl p-4 sm:px-6 shadow-2xl border border-slate-700 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-mono font-bold text-sm">
+              {bulkCartComponents.length}
+            </div>
+            <div>
+              <div className="text-xs sm:text-sm font-semibold">
+                Bulk Salvage Cart ({bulkCartComponents.length} ICs from{' '}
+                {new Set(bulkCartComponents.map((c) => c.donorBoardId)).size}{' '}
+                Donor Boards)
+              </div>
+              <div className="text-[11px] text-slate-300 font-mono">
+                Parts: ₹
+                {bulkCartComponents.reduce((s, c) => s + c.partPriceInr, 0)} +
+                Extraction: ₹
+                {bulkCartComponents.reduce((s, c) => s + c.extractionFeeInr, 0)}{' '}
+                + 10% Escrow Fee
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 ml-auto">
+            <button
+              type="button"
+              onClick={() => setBulkCartIds([])}
+              className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium"
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowBulkCartModal(true)}
+              className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-[#1D1D1F] font-semibold text-xs transition-all"
+            >
+              Checkout Bulk Cart →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Component Cart Checkout Modal */}
+      {showBulkCartModal && bulkCartComponents.length > 0 && (() => {
+        const distinctBoardsCount = new Set(
+          bulkCartComponents.map((c) => c.donorBoardId)
+        ).size;
+        const totalPartsInr = bulkCartComponents.reduce(
+          (s, c) => s + c.partPriceInr,
+          0
+        );
+        const totalExtractionInr = bulkCartComponents.reduce(
+          (s, c) => s + c.extractionFeeInr,
+          0
+        );
+        const unifiedCommissionInr = Math.max(
+          10,
+          Math.round((totalPartsInr + totalExtractionInr) * 0.1)
+        );
+        const allSameDistrict = bulkCartComponents.every((c) => {
+          const b = boardMap.get(c.donorBoardId);
+          return (
+            (b?.sellerDistrict || 'Chennai').toLowerCase() ===
+            bulkBuyerDistrict.toLowerCase()
+          );
+        });
+        const bundledShippingInr = allSameDistrict ? 39 : 49;
+        const bundledLogisticsLabel = allSameDistrict
+          ? 'Rapido Local Bike Parcel (₹39 Bundled)'
+          : 'India Post Speed Post (₹49 Outstation Parcel)';
+        const grandTotalInr =
+          totalPartsInr +
+          totalExtractionInr +
+          unifiedCommissionInr +
+          bundledShippingInr;
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-md">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
+                <div>
+                  <h3 className="text-base font-semibold text-[#1D1D1F]">
+                    Bulk Component Cart Checkout ({bulkCartComponents.length}{' '}
+                    Parts)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Bundled across {distinctBoardsCount} Donor Motherboards •
+                    Unified 10% Commission &amp; Single Shipping
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowBulkCartModal(false)}
+                  className="p-1.5 rounded-full hover:bg-slate-200 text-slate-500"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto space-y-4">
+                <div className="space-y-2">
+                  {bulkCartComponents.map((c) => {
+                    const b = boardMap.get(c.donorBoardId);
+                    return (
+                      <div
+                        key={c.id}
+                        className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs"
+                      >
+                        <div>
+                          <div className="font-mono font-bold text-[#1D1D1F]">
+                            {c.partNumber} — {c.partName}
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            Origin: {b?.boardName} ({b?.sellerDistrict || 'Chennai'})
+                          </div>
+                        </div>
+                        <div className="font-mono text-right">
+                          <div className="font-semibold text-emerald-700">
+                            ₹{c.partPriceInr} + ₹{c.extractionFeeInr} fee
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                      Buyer Name
+                    </label>
+                    <input
+                      type="text"
+                      value={bulkBuyerName}
+                      onChange={(e) => setBulkBuyerName(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                      Destination District
+                    </label>
+                    <select
+                      value={bulkBuyerDistrict}
+                      onChange={(e) => setBulkBuyerDistrict(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium"
+                    >
+                      {(
+                        INDIAN_STATES_DISTRICTS[0]?.districts || [
+                          'Chennai',
+                          'Madurai',
+                          'Coimbatore',
+                        ]
+                      ).map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs font-mono">
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">
+                      Combined Parts ({bulkCartComponents.length} ICs):
+                    </span>
+                    <span>₹{totalPartsInr}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">
+                      Combined Hot-Air Extraction Escrow:
+                    </span>
+                    <span>₹{totalExtractionInr}</span>
+                  </div>
+                  <div className="flex justify-between text-emerald-700 font-semibold">
+                    <span>Unified 10% Platform Commission:</span>
+                    <span>₹{unifiedCommissionInr}</span>
+                  </div>
+                  <div className="flex justify-between text-sky-700">
+                    <span className="flex items-center gap-1">
+                      <Truck className="w-3.5 h-3.5" />
+                      {bundledLogisticsLabel}:
+                    </span>
+                    <span>₹{bundledShippingInr}</span>
+                  </div>
+                  <div className="pt-2 border-t border-slate-200 flex justify-between text-sm font-bold text-[#1D1D1F]">
+                    <span>Total Bundled Payable:</span>
+                    <span className="text-emerald-700">₹{grandTotalInr}</span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    bulkCartComponents.forEach((c, idx) => {
+                      placeOrder({
+                        buyerName: bulkBuyerName || 'Laptop Shop Owner',
+                        buyerPhone: bulkBuyerPhone || '9840012345',
+                        buyerAddress: bulkBuyerAddress || 'Ritchie Street',
+                        buyerState: 'Tamil Nadu',
+                        buyerDistrict: bulkBuyerDistrict,
+                        buyerPincode: '600002',
+                        donorBoardId: c.donorBoardId,
+                        componentId: c.id,
+                        mode: 'EXTRACTED_TESTED_PART',
+                        deliveryType: allSameDistrict
+                          ? 'HYPERLOCAL_RAPIDO'
+                          : 'OUTSTATION_PARCEL',
+                        logisticsPartner: bundledLogisticsLabel,
+                        platformCommissionInr:
+                          idx === 0 ? unifiedCommissionInr : 0,
+                        deliveryFeeInr: idx === 0 ? bundledShippingInr : 0,
+                        upiUtrOrPaymentId: bulkUtr || '429104829104',
+                      });
+                    });
+                    setBulkCartIds([]);
+                    setShowBulkCartModal(false);
+                    setActiveTab('ORDERS_TRACKER');
+                  }}
+                  className="w-full py-3 rounded-2xl bg-[#1D1D1F] hover:bg-slate-800 text-white font-semibold text-xs transition-all"
+                >
+                  Confirm Bulk Cart Order (₹{grandTotalInr}) →
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

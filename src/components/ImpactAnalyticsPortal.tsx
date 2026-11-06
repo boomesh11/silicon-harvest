@@ -46,6 +46,32 @@ export const ImpactAnalyticsPortal: React.FC = () => {
   const studentSavingsInr =
     estimatedRetailEquivalentInr - totalSalvageCatalogValueInr;
 
+  // Platform Escrow & Revenue Ledger (70% Tech Payout, 30% Hub Reserve, 10% Platform Commission)
+  const completedExtractions = orders.filter(
+    (o) =>
+      o.mode === 'EXTRACTED_TESTED_PART' &&
+      (o.status === 'READY_FOR_DISPATCH' || o.status === 'COMPLETED')
+  );
+  const hubReserve30PercentInr = Number(
+    completedExtractions
+      .reduce((sum, o) => sum + o.extractionFeeInr * 0.3, 0)
+      .toFixed(2)
+  );
+  const totalPlatformCommission10PercentInr = Number(
+    orders
+      .reduce(
+        (sum, o) =>
+          sum +
+          (o.platformCommissionInr ||
+            Math.max(10, Math.round((o.itemPriceInr + o.extractionFeeInr) * 0.1))),
+        0
+      )
+      .toFixed(2)
+  );
+  const totalPlatformRevenueInr = Number(
+    (hubReserve30PercentInr + totalPlatformCommission10PercentInr).toFixed(2)
+  );
+
   // Dynamically derive active hub locations from real listed donor boards
   const activeHubSummaries = useMemo(() => {
     const map = new Map<
@@ -214,12 +240,68 @@ Technician Escrow Payouts  : Rs. ${techWalletBalanceInr} (${techCompletedJobsCou
             ₹{techWalletBalanceInr}
           </div>
           <p className="text-xs text-slate-500 leading-relaxed">
-            Paid to technicians across{' '}
+            70% extraction fee paid across{' '}
             <strong className="text-[#1D1D1F]">
               {techCompletedJobsCount} multimeter-verified
             </strong>{' '}
             extractions.
           </p>
+        </div>
+      </div>
+
+      {/* Platform Revenue & Escrow Split Ledger (70% Tech / 30% Hub / 10% Platform Fee) */}
+      <div className="bg-white/90 backdrop-blur-2xl border border-slate-200/80 rounded-3xl p-8 space-y-5 shadow-[0_8px_30px_rgba(15,23,42,0.05)]">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight text-[#1D1D1F] flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-600" />
+              Platform Revenue &amp; Escrow Split Ledger
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">
+              Real-time accounting of 70% technician payouts, 30% hub rework reserve, and 10% platform commission across {orders.length} orders.
+            </p>
+          </div>
+          <span className="font-mono text-xs px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold">
+            Net Platform Revenue: ₹{totalPlatformRevenueInr}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200/90 space-y-1">
+            <div className="text-[11px] font-mono uppercase text-slate-500 font-semibold">
+              70% Technician Escrow Payouts
+            </div>
+            <div className="font-mono text-2xl font-bold text-amber-700">
+              ₹{techWalletBalanceInr}
+            </div>
+            <div className="text-xs text-slate-500">
+              Credited on multimeter QC completion ({techCompletedJobsCount} jobs)
+            </div>
+          </div>
+
+          <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200/90 space-y-1">
+            <div className="text-[11px] font-mono uppercase text-slate-500 font-semibold">
+              30% Hub Rework &amp; Consumables Reserve
+            </div>
+            <div className="font-mono text-2xl font-bold text-sky-700">
+              ₹{hubReserve30PercentInr}
+            </div>
+            <div className="text-xs text-slate-500">
+              Retained from extraction fees for flux, solder wick &amp; ESD tubes
+            </div>
+          </div>
+
+          <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200/90 space-y-1">
+            <div className="text-[11px] font-mono uppercase text-slate-500 font-semibold">
+              10% Platform Escrow Commission
+            </div>
+            <div className="font-mono text-2xl font-bold text-emerald-700">
+              ₹{totalPlatformCommission10PercentInr}
+            </div>
+            <div className="text-xs text-slate-500">
+              10% buyer protection &amp; escrow fee across {orders.length} orders
+            </div>
+          </div>
         </div>
       </div>
 
