@@ -271,7 +271,8 @@ class SiliconHarvestStateMachine {
       ? 0
       : Math.max(5, Math.round((effectivePartPriceInr + extractionFeeInr) * 0.05));
 
-    const deliveryFeeInr = isSameDistrict ? 35 : 45;
+    // Flexible logistics coordination: Zero forced markup; direct dispatch booking
+    const deliveryFeeInr = 0;
     const totalPayableInr =
       effectivePartPriceInr +
       extractionFeeInr +
@@ -519,8 +520,8 @@ assert.equal(relayOrder.itemPriceInr, 45, 'Discounted part price must be ₹45')
 assert.equal(relayOrder.bargainDiscountInr, 15, 'Bargain discount must be ₹15');
 assert.equal(relayOrder.extractionFeeInr, 25, 'Extraction QC fee must be ₹25');
 assert.equal(relayOrder.platformCommissionInr, 0, 'Pro commission must be ₹0');
-assert.equal(relayOrder.deliveryFeeInr, 35, 'Rapido same-district fee must be ₹35');
-assert.equal(relayOrder.totalPayableInr, 105, 'Total payable must be ₹105');
+assert.equal(relayOrder.deliveryFeeInr, 0, 'Flexible coordination fee must be ₹0 platform markup');
+assert.equal(relayOrder.totalPayableInr, 70, 'Total payable must be ₹70 (₹45 part + ₹25 QC + ₹0 delivery)');
 assert.equal(relayOffer.status, 'REDEEMED', 'Bargain offer must transition to REDEEMED');
 assert.equal(
   washingBoard.status,

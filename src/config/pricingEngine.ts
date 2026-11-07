@@ -27,63 +27,63 @@ export interface LogisticsOption {
 export const LOGISTICS_PARTNERS: Record<LogisticsPartnerKey, LogisticsOption> = {
   RAPIDO: {
     key: 'RAPIDO',
-    label: 'Rapido Bike Parcel',
+    label: '🛵 Rapido Bike Delivery (Same District)',
     shortLabel: 'Rapido Bike',
-    eta: '35–45 mins',
-    feeInr: 35,
+    eta: 'Fast local pickup. Coordinate with nearest Rapido rider or app.',
+    feeInr: 0,
     deliveryType: 'HYPERLOCAL_RAPIDO',
-    isHyperlocal: true,
-  },
-  DUNZO: {
-    key: 'DUNZO',
-    label: 'Dunzo Express',
-    shortLabel: 'Dunzo Express',
-    eta: '45 mins',
-    feeInr: 45,
-    deliveryType: 'HYPERLOCAL_DUNZO',
     isHyperlocal: true,
   },
   PORTER: {
     key: 'PORTER',
-    label: 'Porter 2-Wheeler Safe',
-    shortLabel: 'Porter Safe',
-    eta: '60 mins',
-    feeInr: 55,
+    label: '🚚 Porter 2-Wheeler / Mini-Truck (Same District / Heavy Boards)',
+    shortLabel: 'Porter Vehicle',
+    eta: 'Best for heavy washing machine PCBs & SMPS units. Book via Porter app.',
+    feeInr: 0,
     deliveryType: 'HYPERLOCAL_PORTER',
     isHyperlocal: true,
   },
-  SELF_PICKUP: {
-    key: 'SELF_PICKUP',
-    label: 'Direct Self-Pickup Hub',
-    shortLabel: 'Self-Pickup',
-    eta: 'Direct Hand-off',
+  DUNZO: {
+    key: 'DUNZO',
+    label: '📦 Dunzo Hyperlocal Courier',
+    shortLabel: 'Dunzo Courier',
+    eta: 'Door-to-door local dispatch.',
     feeInr: 0,
-    deliveryType: 'CAMPUS_HUB_PICKUP',
+    deliveryType: 'HYPERLOCAL_DUNZO',
     isHyperlocal: true,
   },
   INDIA_POST: {
     key: 'INDIA_POST',
-    label: 'India Post Speed Post',
-    shortLabel: 'Speed Post',
-    eta: '2–4 Business Days',
-    feeInr: 45,
+    label: '📮 India Post / Delhivery Express (Other Districts / State)',
+    shortLabel: 'India Post / Delhivery',
+    eta: 'Secure parcel tracking for outstation deliveries.',
+    feeInr: 0,
     deliveryType: 'OUTSTATION_PARCEL',
     isHyperlocal: false,
   },
   DELHIVERY: {
     key: 'DELHIVERY',
-    label: 'Delhivery Surface Express',
-    shortLabel: 'Delhivery Express',
-    eta: '2–3 Days (Live AWB)',
-    feeInr: 65,
+    label: '📮 Delhivery Express Air/Surface',
+    shortLabel: 'Delhivery',
+    eta: 'Inter-district parcel tracking for outstation deliveries.',
+    feeInr: 0,
     deliveryType: 'OUTSTATION_DELHIVERY',
     isHyperlocal: false,
+  },
+  SELF_PICKUP: {
+    key: 'SELF_PICKUP',
+    label: '🤝 Self-Pickup / Direct Hand-off',
+    shortLabel: 'Self-Pickup',
+    eta: 'Pick up directly from seller’s hub or campus location.',
+    feeInr: 0,
+    deliveryType: 'CAMPUS_HUB_PICKUP',
+    isHyperlocal: true,
   },
 };
 
 export function resolveDeliveryFeeFromType(
   deliveryType: DeliveryType,
-  isSameDistrict: boolean
+  _isSameDistrict: boolean
 ): { feeInr: number; partnerLabel: string } {
   switch (deliveryType) {
     case 'CAMPUS_HUB_PICKUP':
@@ -91,20 +91,17 @@ export function resolveDeliveryFeeFromType(
       return { feeInr: 0, partnerLabel: LOGISTICS_PARTNERS.SELF_PICKUP.label };
     case 'HYPERLOCAL_RAPIDO':
     case 'HYPERLOCAL_BIKE':
-      return { feeInr: 35, partnerLabel: LOGISTICS_PARTNERS.RAPIDO.label };
+      return { feeInr: 0, partnerLabel: LOGISTICS_PARTNERS.RAPIDO.label };
     case 'HYPERLOCAL_DUNZO':
-      return { feeInr: 45, partnerLabel: LOGISTICS_PARTNERS.DUNZO.label };
+      return { feeInr: 0, partnerLabel: LOGISTICS_PARTNERS.DUNZO.label };
     case 'HYPERLOCAL_PORTER':
-      return { feeInr: 55, partnerLabel: LOGISTICS_PARTNERS.PORTER.label };
+      return { feeInr: 0, partnerLabel: LOGISTICS_PARTNERS.PORTER.label };
     case 'OUTSTATION_DELHIVERY':
-      return { feeInr: 65, partnerLabel: LOGISTICS_PARTNERS.DELHIVERY.label };
+      return { feeInr: 0, partnerLabel: LOGISTICS_PARTNERS.DELHIVERY.label };
     case 'OUTSTATION_PARCEL':
     case 'OUTSTATION_SPEEDPOST':
-      return { feeInr: 45, partnerLabel: LOGISTICS_PARTNERS.INDIA_POST.label };
     default:
-      return isSameDistrict
-        ? { feeInr: 35, partnerLabel: LOGISTICS_PARTNERS.RAPIDO.label }
-        : { feeInr: 45, partnerLabel: LOGISTICS_PARTNERS.INDIA_POST.label };
+      return { feeInr: 0, partnerLabel: LOGISTICS_PARTNERS.INDIA_POST.label };
   }
 }
 

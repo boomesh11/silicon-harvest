@@ -670,79 +670,43 @@ Certified by SiliconHarvest ESD & Chip-Level Salvage Network
                       Boolean(order.trackingOrPorterLink)
                     ? 3
                     : order.status === 'READY_FOR_DISPATCH'
-                    ? requiresHotAirExtraction
-                      ? 3
-                      : 2
-                    : 2; // PENDING_EXTRACTION is actively in Stage 2 (Workbench) with Stage 1 locked
+                    ? 2
+                    : 1;
 
-                const flowStages = requiresHotAirExtraction
-                  ? [
-                      {
-                        num: 1,
-                        title: '1. Order & Escrow Locked',
-                        desc: `₹${order.extractionFeeInr ?? 25} QC escrow locked`,
-                      },
-                      {
-                        num: 2,
-                        title: '2. Hot-Air Extraction & Multimeter QC',
-                        desc:
-                          order.status === 'PENDING_EXTRACTION'
-                            ? 'Queued at Tech Workbench'
-                            : `QC Passed: ${
-                                order.multimeterReadingValue || 'Verified'
-                              }`,
-                      },
-                      {
-                        num: 3,
-                        title: '3. Ready for Courier Pickup',
-                        desc:
-                          order.trackingOrPorterLink ||
-                          `Packed in ESD pouch for ${
-                            order.logisticsPartner || 'Courier'
-                          }`,
-                      },
-                      {
-                        num: 4,
-                        title: '4. In Transit / Delivered',
-                        desc:
-                          order.status === 'COMPLETED'
-                            ? 'Delivered & verified by buyer'
-                            : order.status === 'IN_TRANSIT'
-                            ? `Dispatched (${order.trackingOrPorterLink || 'Live'})`
-                            : 'Awaiting final delivery confirmation',
-                      },
-                    ]
-                  : [
-                      {
-                        num: 1,
-                        title: '1. Order Confirmed & Paid',
-                        desc: `Ref: ${order.upiUtrOrPaymentId || 'Verified'}`,
-                      },
-                      {
-                        num: 2,
-                        title: '2. Packed & Ready for Dispatch',
-                        desc:
-                          (order.hardwareMode || board?.hardwareMode) ===
-                          'READY_TO_USE'
-                            ? 'Pre-desoldered part sealed in ESD pouch'
-                            : 'Full raw donor PCB packed as-is',
-                      },
-                      {
-                        num: 3,
-                        title: '3. Out for Delivery (Rapido / Speed Post)',
-                        desc:
-                          order.trackingOrPorterLink ||
-                          `Assigned to ${order.logisticsPartner || 'Courier'}`,
-                      },
-                      {
-                        num: 4,
-                        title: '4. Delivered & Verified',
-                        desc:
-                          order.status === 'COMPLETED'
-                            ? 'Delivered & verified in circuit'
-                            : 'Awaiting final handover',
-                      },
-                    ];
+                const flowStages = [
+                  {
+                    num: 1,
+                    title: '1. Order Confirmed & Escrow Secured',
+                    desc: order.upiUtrOrPaymentId
+                      ? `Escrow Reference: ${order.upiUtrOrPaymentId}`
+                      : 'Payment secured in platform escrow',
+                  },
+                  {
+                    num: 2,
+                    title: '2. Packed & Labeled by Seller',
+                    desc:
+                      order.status === 'PENDING_EXTRACTION'
+                        ? 'Desoldering & multimeter QC in progress'
+                        : order.multimeterReadingValue
+                        ? `QC Passed: ${order.multimeterReadingValue}`
+                        : 'Component inspected, ESD sealed & labeled',
+                  },
+                  {
+                    num: 3,
+                    title: '3. Dispatched / In Transit (Rapido/Porter/Parcel)',
+                    desc:
+                      order.trackingOrPorterLink ||
+                      `Dispatch assigned to ${order.logisticsPartner || 'Selected Courier'}`,
+                  },
+                  {
+                    num: 4,
+                    title: '4. Delivered & Verified',
+                    desc:
+                      order.status === 'COMPLETED'
+                        ? 'Package delivered & tested by buyer'
+                        : 'Awaiting final delivery verification',
+                  },
+                ];
 
                 const currentTrackingInput =
                   trackingInputs[order.id] !== undefined
@@ -913,7 +877,7 @@ Certified by SiliconHarvest ESD & Chip-Level Salvage Network
                       <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
                         <span className="text-slate-700 font-semibold flex items-center gap-1.5">
                           <Link2 className="w-3.5 h-3.5 text-sky-600" />
-                          Dispatch Tracking ID / Rapido Rider Link / Speed Post AWB:
+                          Dispatch Reference / Tracking ID / Rider Contact Note:
                         </span>
                         {order.trackingOrPorterLink &&
                           order.trackingOrPorterLink.startsWith('http') && (
@@ -938,7 +902,7 @@ Certified by SiliconHarvest ESD & Chip-Level Salvage Network
                               [order.id]: e.target.value,
                             }))
                           }
-                          placeholder="Enter Rapido Live Rider Link, Speed Post AWB, or Campus Locker ID..."
+                          placeholder='e.g. "Booked via Rapido - Tracking #RH9821" or "Handed to Porter driver"...'
                           className="flex-1 px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-xs font-mono text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-sky-500/20"
                         />
                         <button
@@ -946,7 +910,7 @@ Certified by SiliconHarvest ESD & Chip-Level Salvage Network
                           onClick={() => handleSaveTracking(order)}
                           className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 font-mono text-xs font-semibold transition-all"
                         >
-                          {savedOrderId === order.id ? 'Saved ✓' : 'Save Link'}
+                          {savedOrderId === order.id ? 'Saved ✓' : 'Save Note'}
                         </button>
                         {isSellerForThisOrder &&
                           order.status !== 'COMPLETED' && (
@@ -955,7 +919,7 @@ Certified by SiliconHarvest ESD & Chip-Level Salvage Network
                               onClick={() => handleDispatchOrder(order)}
                               className="px-4 py-2 rounded-xl bg-[#0F172A] hover:bg-slate-800 text-white font-mono text-xs font-bold transition-all"
                             >
-                              Dispatch via Rapido / Speed Post →
+                              Dispatch via {order.logisticsPartner || 'Selected Partner'} →
                             </button>
                           )}
                       </div>

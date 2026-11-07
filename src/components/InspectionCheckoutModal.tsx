@@ -779,11 +779,11 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                   </div>
                 </div>
 
-                {/* Step 3: District Logistics Matching */}
+                {/* Step 3: Flexible Logistics Coordination */}
                 <div className="space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-1.5">
                     <label className="block text-xs font-mono font-semibold uppercase tracking-wider text-slate-600">
-                      Step 3 • Select Delivery Courier Partner
+                      Step 3 • Logistics Preference &amp; Coordination
                     </label>
                     <span className="text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
                       Seller: {sellerDistrict} ➔ Buyer: {buyerDistrict}{' '}
@@ -791,141 +791,136 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                     </span>
                   </div>
 
-                  {isSameDistrict ? (
-                    /* Same District: Bike Parcel Partners (Single Source of Truth Rates) */
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
-                      <div
-                        onClick={() => setLogisticsPartner('RAPIDO')}
-                        className={`min-h-[54px] p-3 rounded-2xl border cursor-pointer text-left transition-all active:scale-95 ${
-                          logisticsPartner === 'RAPIDO'
-                            ? 'border-emerald-600 bg-emerald-50/60 ring-2 ring-emerald-500/20'
-                            : 'border-slate-200 hover:border-slate-300 bg-white'
-                        }`}
-                      >
-                        <div className="text-base">🛵</div>
-                        <span className="font-bold text-xs text-[#0F172A] block mt-1">
-                          Rapido Bike
-                        </span>
-                        <span className="text-[11px] text-slate-500 block">
-                          {LOGISTICS_PARTNERS.RAPIDO.eta}
-                        </span>
-                        <span className="text-xs font-mono font-bold text-emerald-700 block mt-1">
-                          ₹{LOGISTICS_PARTNERS.RAPIDO.feeInr}
-                        </span>
-                      </div>
+                  <p className="text-xs text-slate-500">
+                    SiliconHarvest operates as a flexible coordination network with direct dispatch. Select how you and the seller will coordinate pickup:
+                  </p>
 
-                      <div
-                        onClick={() => setLogisticsPartner('DUNZO')}
-                        className={`min-h-[54px] p-3 rounded-2xl border cursor-pointer text-left transition-all active:scale-95 ${
-                          logisticsPartner === 'DUNZO'
-                            ? 'border-emerald-600 bg-emerald-50/60 ring-2 ring-emerald-500/20'
-                            : 'border-slate-200 hover:border-slate-300 bg-white'
-                        }`}
-                      >
-                        <div className="text-base">📦</div>
-                        <span className="font-bold text-xs text-[#0F172A] block mt-1">
-                          Dunzo Express
-                        </span>
-                        <span className="text-[11px] text-slate-500 block">
-                          {LOGISTICS_PARTNERS.DUNZO.eta}
-                        </span>
-                        <span className="text-xs font-mono font-bold text-emerald-700 block mt-1">
-                          ₹{LOGISTICS_PARTNERS.DUNZO.feeInr}
-                        </span>
-                      </div>
-
-                      <div
-                        onClick={() => setLogisticsPartner('PORTER')}
-                        className={`min-h-[54px] p-3 rounded-2xl border cursor-pointer text-left transition-all active:scale-95 ${
-                          logisticsPartner === 'PORTER'
-                            ? 'border-emerald-600 bg-emerald-50/60 ring-2 ring-emerald-500/20'
-                            : 'border-slate-200 hover:border-slate-300 bg-white'
-                        }`}
-                      >
-                        <div className="text-base">🚚</div>
-                        <span className="font-bold text-xs text-[#0F172A] block mt-1">
-                          Porter Safe
-                        </span>
-                        <span className="text-[11px] text-slate-500 block">
-                          {LOGISTICS_PARTNERS.PORTER.eta}
-                        </span>
-                        <span className="text-xs font-mono font-bold text-emerald-700 block mt-1">
-                          ₹{LOGISTICS_PARTNERS.PORTER.feeInr}
-                        </span>
-                      </div>
-
-                      <div
-                        onClick={() => setLogisticsPartner('SELF_PICKUP')}
-                        className={`min-h-[54px] p-3 rounded-2xl border cursor-pointer text-left transition-all active:scale-95 ${
-                          logisticsPartner === 'SELF_PICKUP'
-                            ? 'border-emerald-600 bg-emerald-50/60 ring-2 ring-emerald-500/20'
-                            : 'border-slate-200 hover:border-slate-300 bg-white'
-                        }`}
-                      >
-                        <div className="text-base">🏛️</div>
-                        <span className="font-bold text-xs text-[#0F172A] block mt-1">
-                          Self-Pickup
-                        </span>
-                        <span className="text-[11px] text-slate-500 block truncate">
-                          {sellerDistrict} Hub
-                        </span>
-                        <span className="text-xs font-mono font-bold text-emerald-700 block mt-1">
-                          ₹{LOGISTICS_PARTNERS.SELF_PICKUP.feeInr}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Rapido Bike */}
+                    <div
+                      onClick={() => setLogisticsPartner('RAPIDO')}
+                      className={`p-3.5 rounded-2xl border cursor-pointer text-left transition-all active:scale-[0.99] ${
+                        logisticsPartner === 'RAPIDO'
+                          ? 'border-emerald-600 bg-emerald-50/70 ring-2 ring-emerald-500/20 shadow-xs'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <span className="font-bold text-xs text-[#0F172A] flex items-center gap-1.5">
+                            <span>🛵</span>
+                            <span>Rapido Bike Delivery (Same District)</span>
+                          </span>
+                          <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                            Fast local pickup. Coordinate with nearest Rapido rider or use app.
+                          </p>
+                        </div>
+                        <span className="text-[11px] font-mono font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-md shrink-0">
+                          Direct Dispatch
                         </span>
                       </div>
                     </div>
-                  ) : (
-                    /* Different District / State: Outstation Courier Partners */
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div
-                        onClick={() => setLogisticsPartner('INDIA_POST')}
-                        className={`min-h-[54px] p-4 rounded-2xl border cursor-pointer text-left transition-all active:scale-95 ${
-                          logisticsPartner === 'INDIA_POST'
-                            ? 'border-emerald-600 bg-emerald-50/60 ring-2 ring-emerald-500/20'
-                            : 'border-slate-200 hover:border-slate-300 bg-white'
-                        }`}
-                      >
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <span className="font-bold text-xs text-[#0F172A] block">
-                              📮 India Post Speed Post (Pocket ESD Pouch)
-                            </span>
-                            <span className="text-[11px] text-slate-500 block mt-0.5">
-                              Flat rate across Tamil Nadu & All India •{' '}
-                              {LOGISTICS_PARTNERS.INDIA_POST.eta}
-                            </span>
-                          </div>
-                          <span className="text-sm font-mono font-bold text-emerald-700">
-                            ₹{LOGISTICS_PARTNERS.INDIA_POST.feeInr}
-                          </span>
-                        </div>
-                      </div>
 
-                      <div
-                        onClick={() => setLogisticsPartner('DELHIVERY')}
-                        className={`min-h-[54px] p-4 rounded-2xl border cursor-pointer text-left transition-all active:scale-95 ${
-                          logisticsPartner === 'DELHIVERY'
-                            ? 'border-emerald-600 bg-emerald-50/60 ring-2 ring-emerald-500/20'
-                            : 'border-slate-200 hover:border-slate-300 bg-white'
-                        }`}
-                      >
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <span className="font-bold text-xs text-[#0F172A] block">
-                              🚛 Delhivery / Shiprocket Surface Express
-                            </span>
-                            <span className="text-[11px] text-slate-500 block mt-0.5">
-                              Fast Inter-District Courier with Live AWB Tracking •{' '}
-                              {LOGISTICS_PARTNERS.DELHIVERY.eta}
-                            </span>
-                          </div>
-                          <span className="text-sm font-mono font-bold text-emerald-700">
-                            ₹{LOGISTICS_PARTNERS.DELHIVERY.feeInr}
+                    {/* Porter 2-Wheeler / Mini-Truck */}
+                    <div
+                      onClick={() => setLogisticsPartner('PORTER')}
+                      className={`p-3.5 rounded-2xl border cursor-pointer text-left transition-all active:scale-[0.99] ${
+                        logisticsPartner === 'PORTER'
+                          ? 'border-emerald-600 bg-emerald-50/70 ring-2 ring-emerald-500/20 shadow-xs'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <span className="font-bold text-xs text-[#0F172A] flex items-center gap-1.5">
+                            <span>🚚</span>
+                            <span>Porter 2-Wheeler / Mini-Truck</span>
                           </span>
+                          <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                            Best for heavy washing machine PCBs and SMPS units. Book via Porter app.
+                          </p>
                         </div>
+                        <span className="text-[11px] font-mono font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-md shrink-0">
+                          Direct Dispatch
+                        </span>
                       </div>
                     </div>
-                  )}
+
+                    {/* Dunzo Hyperlocal Courier */}
+                    <div
+                      onClick={() => setLogisticsPartner('DUNZO')}
+                      className={`p-3.5 rounded-2xl border cursor-pointer text-left transition-all active:scale-[0.99] ${
+                        logisticsPartner === 'DUNZO'
+                          ? 'border-emerald-600 bg-emerald-50/70 ring-2 ring-emerald-500/20 shadow-xs'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <span className="font-bold text-xs text-[#0F172A] flex items-center gap-1.5">
+                            <span>📦</span>
+                            <span>Dunzo Hyperlocal Courier</span>
+                          </span>
+                          <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                            Door-to-door local dispatch.
+                          </p>
+                        </div>
+                        <span className="text-[11px] font-mono font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-md shrink-0">
+                          Direct Dispatch
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* India Post / Delhivery Express */}
+                    <div
+                      onClick={() => setLogisticsPartner('INDIA_POST')}
+                      className={`p-3.5 rounded-2xl border cursor-pointer text-left transition-all active:scale-[0.99] ${
+                        logisticsPartner === 'INDIA_POST' || logisticsPartner === 'DELHIVERY'
+                          ? 'border-emerald-600 bg-emerald-50/70 ring-2 ring-emerald-500/20 shadow-xs'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <span className="font-bold text-xs text-[#0F172A] flex items-center gap-1.5">
+                            <span>📮</span>
+                            <span>India Post / Delhivery Express</span>
+                          </span>
+                          <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                            Secure parcel tracking for outstation deliveries.
+                          </p>
+                        </div>
+                        <span className="text-[11px] font-mono font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-md shrink-0">
+                          Parcel Post
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Self-Pickup / Direct Hand-off */}
+                    <div
+                      onClick={() => setLogisticsPartner('SELF_PICKUP')}
+                      className={`p-3.5 rounded-2xl border cursor-pointer text-left transition-all active:scale-[0.99] sm:col-span-2 ${
+                        logisticsPartner === 'SELF_PICKUP'
+                          ? 'border-emerald-600 bg-emerald-50/70 ring-2 ring-emerald-500/20 shadow-xs'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <span className="font-bold text-xs text-[#0F172A] flex items-center gap-1.5">
+                            <span>🤝</span>
+                            <span>Self-Pickup / Direct Hand-off (₹0)</span>
+                          </span>
+                          <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                            Pick up directly from seller&apos;s hub or campus location ({sellerDistrict}).
+                          </p>
+                        </div>
+                        <span className="text-[11px] font-mono font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md shrink-0">
+                          ₹0 Free
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Step 4: UPI Payment & Itemized Bill */}
@@ -988,9 +983,12 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                     </div>
 
                     <div className="flex justify-between text-slate-600">
-                      <span>Delivery Fee ({partnerInfo.label})</span>
-                      <span className="font-mono font-semibold text-slate-900">
-                        ₹{deliveryFeeInr}
+                      <span className="flex items-center gap-1.5">
+                        <Truck className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Coordination Mode: Selected by Buyer (Direct Dispatch)</span>
+                      </span>
+                      <span className="font-mono font-semibold text-emerald-700">
+                        {logisticsPartner === 'SELF_PICKUP' ? 'Self-Pickup (₹0)' : 'Direct Booking (₹0 Platform Markup)'}
                       </span>
                     </div>
 
