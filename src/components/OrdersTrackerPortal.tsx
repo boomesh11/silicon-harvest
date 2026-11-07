@@ -36,6 +36,7 @@ export const OrdersTrackerPortal: React.FC = () => {
     dispatchOrderBySeller,
     setActiveTab,
     setPendingCheckoutTarget,
+    openChatModal,
   } = useHarvestStore();
 
   const isOwnerAdmin = Boolean(
@@ -968,6 +969,29 @@ Certified by SiliconHarvest ESD & Chip-Level Salvage Network
                             <span>Verify on Tech Workbench</span>
                           </button>
                         )}
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const isSeller = isSellerForThisOrder;
+                            openChatModal({
+                              orderId: order.id,
+                              orderCode: order.orderCode,
+                              boardId: order.donorBoardId,
+                              boardName: board?.boardName,
+                              recipientId: isSeller
+                                ? (order.buyerId || 'buyer-1')
+                                : (order.sellerId || board?.sellerId || 'seller-1'),
+                              recipientName: isSeller
+                                ? order.buyerName
+                                : (order.sellerName || board?.sellerName || 'Seller'),
+                            });
+                          }}
+                          className="px-3.5 py-2 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-mono text-xs font-semibold flex items-center gap-1.5 transition-all active:scale-95"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5 text-sky-600" />
+                          <span>{isSellerForThisOrder ? 'Chat with Buyer' : 'Chat with Seller'}</span>
+                        </button>
 
                         <a
                           href={whatsappDispatchUrl}

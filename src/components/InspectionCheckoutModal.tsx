@@ -10,7 +10,11 @@ import {
   Sparkles,
   ArrowRight,
   AlertCircle,
+  MessageSquare,
+  QrCode,
+  Lock,
 } from 'lucide-react';
+import { UpiPaymentModal } from './UpiPaymentModal';
 import {
   DonorBoard,
   HarvestableComponent,
@@ -39,7 +43,7 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
   initialMode,
   onClose,
 }) => {
-  const { components, placeOrder, setActiveTab, currentUser, bargainOffers } =
+  const { components, placeOrder, setActiveTab, currentUser, bargainOffers, openChatModal } =
     useHarvestStore();
 
   const boardComponents = components.filter((c) => c.donorBoardId === board.id);
@@ -125,6 +129,7 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
 
   const [paymentMethod, setPaymentMethod] = useState<'UPI_INSTANT' | 'COD_ON_PICKUP'>('UPI_INSTANT');
   const [upiUtrInput, setUpiUtrInput] = useState('');
+  const [showUpiModal, setShowUpiModal] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [placedOrder, setPlacedOrder] = useState<Order | null>(null);
 
@@ -334,13 +339,33 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            aria-label="Close Checkout"
-            className="min-h-[44px] min-w-[44px] rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-[#0F172A] border border-slate-200 flex items-center justify-center shrink-0 active:scale-95 transition-all"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                openChatModal({
+                  boardId: board.id,
+                  boardName: board.boardName,
+                  recipientId: board.sellerId || 'seller-1',
+                  recipientName: board.sellerName,
+                });
+              }}
+              className="min-h-[40px] px-3.5 py-1.5 rounded-full border border-sky-200 bg-sky-50 text-sky-800 text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all shadow-2xs hover:bg-sky-100"
+              title="Chat with Seller directly"
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-sky-600" />
+              <span className="hidden sm:inline">Chat with Seller</span>
+            </button>
+
+            <button
+              onClick={onClose}
+              aria-label="Close Checkout"
+              className="min-h-[44px] min-w-[44px] rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-[#0F172A] border border-slate-200 flex items-center justify-center shrink-0 active:scale-95 transition-all"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Modal Body */}
@@ -1054,12 +1079,22 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                         </div>
 
                         <div className="space-y-2 text-xs w-full">
-                          <span className="font-semibold text-slate-800 block">
-                            Pay with 1-Click UPI Intent or Scan QR:
-                          </span>
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-slate-800 block">
+                              Pay with 1-Click UPI Apps or Scan QR:
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setShowUpiModal(true)}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] flex items-center gap-1 active:scale-95 shadow-2xs"
+                            >
+                              <QrCode className="w-3 h-3" />
+                              <span>Full QR &amp; UTR Assistant</span>
+                            </button>
+                          </div>
 
-                          {/* 1-Click Launch Buttons for GPay, PhonePe, Paytm */}
-                          <div className="grid grid-cols-3 gap-1.5">
+                          {/* 1-Click Launch Buttons for GPay, PhonePe, Paytm, BHIM */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                             <a
                               href={upiDeepLink}
                               className="min-h-[38px] px-2 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] flex items-center justify-center text-center active:scale-95 transition-all shadow-xs"
@@ -1068,7 +1103,7 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                             </a>
                             <a
                               href={upiDeepLink}
-                              className="min-h-[38px] px-2 py-1.5 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-[11px] flex items-center justify-center text-center active:scale-95 transition-all shadow-xs"
+                              className="min-h-[38px] px-2 py-1.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-[11px] flex items-center justify-center text-center active:scale-95 transition-all shadow-xs"
                             >
                               PhonePe
                             </a>
@@ -1077,6 +1112,12 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                               className="min-h-[38px] px-2 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-[11px] flex items-center justify-center text-center active:scale-95 transition-all shadow-xs"
                             >
                               Paytm
+                            </a>
+                            <a
+                              href={upiDeepLink}
+                              className="min-h-[38px] px-2 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-[11px] flex items-center justify-center text-center active:scale-95 transition-all shadow-xs"
+                            >
+                              BHIM UPI
                             </a>
                           </div>
 
@@ -1166,6 +1207,20 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
           )}
         </div>
       </div>
+
+      {/* Dynamic Full Screen UPI QR & Apps Modal */}
+      <UpiPaymentModal
+        isOpen={showUpiModal}
+        onClose={() => setShowUpiModal(false)}
+        amountInr={totalPayableInr}
+        orderCode={`ORD-${board.id.slice(0, 8)}`}
+        itemTitle={selectedComp ? `${selectedComp.partNumber} (${selectedComp.partName})` : board.boardName}
+        onConfirmUtr={(utr) => {
+          setUpiUtrInput(utr);
+          setShowUpiModal(false);
+        }}
+        initialUtr={upiUtrInput}
+      />
     </div>
   );
 };

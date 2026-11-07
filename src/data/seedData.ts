@@ -5,6 +5,7 @@ import {
   BoardTemplate,
   BargainOffer,
   UserProfile,
+  C2CMessage,
 } from '../types/harvest';
 
 // Clean production initialization: zero fake/seed inventory, orders, bargains, or users.
@@ -14,6 +15,7 @@ export const INITIAL_ORDERS: Order[] = [];
 export const INITIAL_BARGAIN_OFFERS: BargainOffer[] = [];
 export const INITIAL_BARGAINS: BargainOffer[] = INITIAL_BARGAIN_OFFERS;
 export const INITIAL_REGISTERED_USERS: UserProfile[] = [];
+export const INITIAL_C2C_MESSAGES: C2CMessage[] = [];
 
 export const SEED_DONOR_BOARDS: DonorBoard[] = INITIAL_DONOR_BOARDS;
 export const SEED_COMPONENTS: HarvestableComponent[] = INITIAL_COMPONENTS;

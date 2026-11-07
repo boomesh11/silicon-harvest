@@ -25,12 +25,14 @@ import {
   OrderStatus,
   ComponentStatus,
   CartItem,
+  C2CMessage,
 } from '../types/harvest';
 import {
   INITIAL_DONOR_BOARDS,
   INITIAL_COMPONENTS,
   INITIAL_ORDERS,
   INITIAL_BARGAINS,
+  INITIAL_C2C_MESSAGES,
 } from '../data/seedData';
 import {
   calculateOrderBreakdown,
@@ -41,6 +43,7 @@ import {
   getSupabaseClient,
   saveRuntimeSupabaseConfig,
   clearRuntimeSupabaseConfig,
+  mapDbC2CMessageToC2CMessage,
 } from '../lib/supabase';
 import {
   DEFAULT_GUEST_PROFILE,
@@ -85,6 +88,7 @@ const STORAGE_KEYS = {
   BARGAINS: 'sh_clean_prod_v5_bargains',
   PRO_OVERRIDES: 'sh_clean_prod_v5_pro_overrides',
   CART: 'sh_clean_prod_v5_cart',
+  C2C_MESSAGES: 'sh_clean_prod_v5_c2c_messages',
 };
 
 const LEGACY_KEYS_TO_PURGE = [
@@ -232,6 +236,38 @@ interface HarvestStoreContextValue {
   }) => Order[];
   isCartDrawerOpen: boolean;
   setIsCartDrawerOpen: (open: boolean) => void;
+  c2cMessages: C2CMessage[];
+  isChatModalOpen: boolean;
+  activeChatThread: {
+    boardId?: string;
+    boardName?: string;
+    orderId?: string;
+    orderCode?: string;
+    recipientId: string;
+    recipientName: string;
+  } | null;
+  openChatModal: (target?: {
+    boardId?: string;
+    boardName?: string;
+    orderId?: string;
+    orderCode?: string;
+    recipientId?: string;
+    recipientName?: string;
+  }) => void;
+  closeChatModal: () => void;
+  sendC2CMessage: (payload: {
+    boardId?: string;
+    boardName?: string;
+    orderId?: string;
+    orderCode?: string;
+    recipientId: string;
+    recipientName?: string;
+    message: string;
+    offerPriceInr?: number;
+    inquiryTag?: string;
+  }) => Promise<C2CMessage>;
+  markChatAsRead: (recipientId: string, boardId?: string) => void;
+  unreadMessagesCount: number;
   techWalletBalanceInr: number;
   techCompletedJobsCount: number;
   activeTab: ActiveTab;
@@ -404,6 +440,18 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     loadFromStorage<CartItem[]>(STORAGE_KEYS.CART, [])
   );
   const [isCartDrawerOpen, setIsCartDrawerOpen] = useState(false);
+  const [c2cMessages, setC2cMessages] = useState<C2CMessage[]>(() =>
+    loadFromStorage<C2CMessage[]>(STORAGE_KEYS.C2C_MESSAGES, INITIAL_C2C_MESSAGES)
+  );
+  const [isChatModalOpen, setIsChatModalOpen] = useState(false);
+  const [activeChatThread, setActiveChatThread] = useState<{
+    boardId?: string;
+    boardName?: string;
+    orderId?: string;
+    orderCode?: string;
+    recipientId: string;
+    recipientName: string;
+  } | null>(null);
   const [currentUser, setCurrentUser] = useState<UserProfile>(() =>
     loadFromStorage(
       USER_SESSION_KEY,
@@ -487,6 +535,10 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [cartItems]);
 
   useEffect(() => {
+    safeSaveToStorage(STORAGE_KEYS.C2C_MESSAGES, c2cMessages);
+  }, [c2cMessages]);
+
+  useEffect(() => {
     safeSaveToStorage(STORAGE_KEYS.USER, currentUser);
     try {
       if (currentUser.id !== DEFAULT_GUEST_PROFILE.id && currentUser.email) {
@@ -567,6 +619,7 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         setOrders(loadFromStorage(STORAGE_KEYS.ORDERS, INITIAL_ORDERS));
         setBargainOffers(loadFromStorage(STORAGE_KEYS.BARGAINS, INITIAL_BARGAINS));
         setSupportTickets(loadFromStorage(STORAGE_KEYS.TICKETS, []));
+        setC2cMessages(loadFromStorage(STORAGE_KEYS.C2C_MESSAGES, INITIAL_C2C_MESSAGES));
         setProDirectoryOverrides(loadFromStorage(STORAGE_KEYS.PRO_OVERRIDES, {}));
         setCurrentUser(
           loadFromStorage(
@@ -1868,6 +1921,133 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     return createdOrders;
   };
 
+  const unreadMessagesCount = useMemo(() => {
+    return c2cMessages.filter(
+      (m) => m.recipientId === currentUser.id && !m.isRead
+    ).length;
+  }, [c2cMessages, currentUser.id]);
+
+  const openChatModal = useCallback(
+    (target?: {
+      boardId?: string;
+      boardName?: string;
+      orderId?: string;
+      orderCode?: string;
+      recipientId?: string;
+      recipientName?: string;
+    }) => {
+      if (target && target.recipientId) {
+        setActiveChatThread({
+          boardId: target.boardId,
+          boardName: target.boardName,
+          orderId: target.orderId,
+          orderCode: target.orderCode,
+          recipientId: target.recipientId,
+          recipientName: target.recipientName || 'Member',
+        });
+      }
+      setIsChatModalOpen(true);
+    },
+    []
+  );
+
+  const closeChatModal = useCallback(() => {
+    setIsChatModalOpen(false);
+  }, []);
+
+  const markChatAsRead = useCallback(
+    (otherPartyId: string, boardId?: string) => {
+      setC2cMessages((prev) => {
+        let changed = false;
+        const updated = prev.map((msg) => {
+          if (
+            msg.senderId === otherPartyId &&
+            msg.recipientId === currentUser.id &&
+            !msg.isRead &&
+            (!boardId || msg.boardId === boardId)
+          ) {
+            changed = true;
+            return { ...msg, isRead: true };
+          }
+          return msg;
+        });
+        return changed ? updated : prev;
+      });
+    },
+    [currentUser.id]
+  );
+
+  const sendC2CMessage = useCallback(
+    async (payload: {
+      boardId?: string;
+      boardName?: string;
+      orderId?: string;
+      orderCode?: string;
+      recipientId: string;
+      recipientName?: string;
+      message: string;
+      offerPriceInr?: number;
+      inquiryTag?: string;
+    }): Promise<C2CMessage> => {
+      const newMsg: C2CMessage = {
+        id: `MSG-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+        boardId: payload.boardId,
+        boardName: payload.boardName,
+        orderId: payload.orderId,
+        orderCode: payload.orderCode,
+        senderId: currentUser.id,
+        senderName: currentUser.fullName || currentUser.email.split('@')[0] || 'Member',
+        recipientId: payload.recipientId,
+        recipientName: payload.recipientName,
+        message: payload.message,
+        offerPriceInr: payload.offerPriceInr,
+        inquiryTag: payload.inquiryTag,
+        isRead: false,
+        createdAt: new Date().toISOString(),
+      };
+
+      setC2cMessages((prev) => [...prev, newMsg]);
+
+      // Attempt Supabase backend sync
+      const client = getSupabaseClient();
+      if (client) {
+        try {
+          await client.from('c2c_messages').insert({
+            id: newMsg.id,
+            board_id: newMsg.boardId || null,
+            board_name: newMsg.boardName || null,
+            order_id: newMsg.orderId || null,
+            order_code: newMsg.orderCode || null,
+            sender_id: newMsg.senderId,
+            sender_name: newMsg.senderName,
+            recipient_id: newMsg.recipientId,
+            recipient_name: newMsg.recipientName || null,
+            message: newMsg.message,
+            offer_price_inr: newMsg.offerPriceInr || null,
+            inquiry_tag: newMsg.inquiryTag || null,
+            is_read: false,
+            created_at: newMsg.createdAt,
+          });
+        } catch {
+          // Table may not exist yet; gracefully handled via localStorage
+        }
+      }
+
+      try {
+        await fetch('/api/harvest', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'SEND_C2C_MESSAGE', payload: { message: newMsg } }),
+        });
+      } catch {
+        // Ignore offline dev
+      }
+
+      return newMsg;
+    },
+    [currentUser]
+  );
+
   const resetDemoState = () => {
     try {
       Object.values(STORAGE_KEYS).forEach((key) => localStorage.removeItem(key));
@@ -1903,6 +2083,14 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         checkoutCart,
         isCartDrawerOpen,
         setIsCartDrawerOpen,
+        c2cMessages,
+        isChatModalOpen,
+        activeChatThread,
+        openChatModal,
+        closeChatModal,
+        sendC2CMessage,
+        markChatAsRead,
+        unreadMessagesCount,
         techWalletBalanceInr,
         techCompletedJobsCount,
         activeTab,

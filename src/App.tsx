@@ -15,6 +15,7 @@ import { MembershipPortal } from './components/MembershipPortal';
 import { OwnerAdminPortal } from './components/OwnerAdminPortal';
 import { FounderVaultModal } from './components/FounderVaultModal';
 import { CartDrawer } from './components/CartDrawer';
+import { C2CChatModal } from './components/C2CChatModal';
 import { Leaf, ShieldCheck, Layers, HelpCircle, Truck } from 'lucide-react';
 
 const MainShell: React.FC = () => {
@@ -58,6 +59,9 @@ const MainShell: React.FC = () => {
 
       {/* Slide-over Shopping Cart Drawer */}
       <CartDrawer />
+
+      {/* Slide-over C2C Customer-to-Customer Chat Drawer */}
+      <C2CChatModal />
 
       <footer className="relative border-t border-slate-200/80 bg-white/80 backdrop-blur-xl py-6 sm:py-8 pb-24 md:pb-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-500 text-center sm:text-left">

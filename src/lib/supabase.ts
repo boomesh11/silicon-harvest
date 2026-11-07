@@ -13,6 +13,7 @@ import {
   DeliveryType,
   OrderStatus,
   SupportTicket,
+  C2CMessage,
 } from '../types/harvest';
 
 const RUNTIME_URL_KEY = 'silicon_harvest_supabase_url';
@@ -215,6 +216,27 @@ export function mapDbTicketToTicket(row: Record<string, any>): SupportTicket {
     category: String(row.category),
     message: String(row.message),
     status: (row.status as any) || 'OPEN',
+    createdAt: String(row.created_at || new Date().toISOString()),
+  };
+}
+
+export function mapDbC2CMessageToC2CMessage(
+  row: Record<string, any>
+): C2CMessage {
+  return {
+    id: String(row.id),
+    boardId: row.board_id ? String(row.board_id) : undefined,
+    boardName: row.board_name ? String(row.board_name) : undefined,
+    orderId: row.order_id ? String(row.order_id) : undefined,
+    orderCode: row.order_code ? String(row.order_code) : undefined,
+    senderId: String(row.sender_id),
+    senderName: String(row.sender_name || 'Anonymous'),
+    recipientId: String(row.recipient_id),
+    recipientName: row.recipient_name ? String(row.recipient_name) : undefined,
+    message: String(row.message || ''),
+    offerPriceInr: row.offer_price_inr ? Number(row.offer_price_inr) : undefined,
+    inquiryTag: row.inquiry_tag ? String(row.inquiry_tag) : undefined,
+    isRead: Boolean(row.is_read),
     createdAt: String(row.created_at || new Date().toISOString()),
   };
 }

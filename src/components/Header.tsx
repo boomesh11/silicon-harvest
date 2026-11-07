@@ -18,6 +18,7 @@ import {
   Crown,
   Sparkles,
   ShoppingBag,
+  MessageSquare,
 } from 'lucide-react';
 import { useHarvestStore } from '../store/useHarvestStore';
 import { ActiveTab } from '../types/harvest';
@@ -38,6 +39,8 @@ export const Header: React.FC = () => {
     resetDemoState,
     cartItems,
     setIsCartDrawerOpen,
+    openChatModal,
+    unreadMessagesCount,
   } = useHarvestStore();
 
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -176,6 +179,22 @@ export const Header: React.FC = () => {
               {cartItems.length > 0 && (
                 <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
                   {cartItems.reduce((acc, i) => acc + i.quantity, 0)}
+                </span>
+              )}
+            </button>
+
+            {/* In-App Customer Messages Drawer Trigger Button */}
+            <button
+              type="button"
+              onClick={() => openChatModal()}
+              className="relative min-h-[40px] px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 border border-slate-200/90 flex items-center gap-1.5 text-xs font-semibold text-slate-800 shadow-2xs active:scale-95 transition-all"
+              title="Direct Customer Messages & Inquiries"
+            >
+              <MessageSquare className="w-4 h-4 text-sky-600" />
+              <span className="hidden sm:inline">Messages</span>
+              {unreadMessagesCount > 0 && (
+                <span className="w-5 h-5 rounded-full bg-sky-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0 animate-pulse">
+                  {unreadMessagesCount}
                 </span>
               )}
             </button>
@@ -534,6 +553,47 @@ export const Header: React.FC = () => {
                     Sign In
                   </button>
                 )}
+              </div>
+
+              {/* Mobile Quick Action Buttons: Cart & Messages */}
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/60">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    setIsCartDrawerOpen(true);
+                  }}
+                  className="p-2.5 rounded-xl bg-white border border-slate-200 flex items-center justify-between text-xs font-bold text-slate-800 shadow-2xs active:scale-95"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <ShoppingBag className="w-4 h-4 text-emerald-600" />
+                    <span>Cart</span>
+                  </div>
+                  {cartItems.length > 0 && (
+                    <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center">
+                      {cartItems.reduce((acc, i) => acc + i.quantity, 0)}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    openChatModal();
+                  }}
+                  className="p-2.5 rounded-xl bg-white border border-slate-200 flex items-center justify-between text-xs font-bold text-slate-800 shadow-2xs active:scale-95"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <MessageSquare className="w-4 h-4 text-sky-600" />
+                    <span>Messages</span>
+                  </div>
+                  {unreadMessagesCount > 0 && (
+                    <span className="w-5 h-5 rounded-full bg-sky-600 text-white text-[10px] font-bold flex items-center justify-center animate-pulse">
+                      {unreadMessagesCount}
+                    </span>
+                  )}
+                </button>
               </div>
 
               {/* District Selector inside Mobile Drawer */}

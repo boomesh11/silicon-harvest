@@ -124,6 +124,23 @@ export interface CartItem {
   imageUrl?: string;
 }
 
+export interface C2CMessage {
+  id: string;
+  boardId?: string;
+  boardName?: string;
+  orderId?: string;
+  orderCode?: string;
+  senderId: string;
+  senderName: string;
+  recipientId: string;
+  recipientName?: string;
+  message: string;
+  offerPriceInr?: number;
+  inquiryTag?: string;
+  isRead?: boolean;
+  createdAt: string;
+}
+
 export interface Order {
   id: string;
   orderCode: string;

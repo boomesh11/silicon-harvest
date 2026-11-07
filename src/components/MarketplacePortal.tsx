@@ -55,6 +55,7 @@ export const MarketplacePortal: React.FC = () => {
     setPendingCheckoutTarget,
     addToCart,
     setIsCartDrawerOpen,
+    openChatModal,
   } = useHarvestStore();
 
   const [cardQuantities, setCardQuantities] = useState<Record<string, number>>({});
@@ -940,6 +941,23 @@ export const MarketplacePortal: React.FC = () => {
                             </span>
                           </button>
                         )}
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openChatModal({
+                              boardId: parentBoard.id,
+                              boardName: `${parentBoard.boardName} (${comp.partNumber})`,
+                              recipientId: parentBoard.sellerId || 'seller-1',
+                              recipientName: parentBoard.sellerName,
+                            });
+                          }}
+                          className="w-full min-h-[38px] py-2 px-3 rounded-xl border border-sky-200 bg-sky-50/60 hover:bg-sky-100 text-sky-800 text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5 text-sky-600" />
+                          <span>💬 Chat with Seller</span>
+                        </button>
                       </>
                     )}
                   </div>
@@ -1203,6 +1221,23 @@ export const MarketplacePortal: React.FC = () => {
                             <span>Bargain</span>
                           </button>
                         )}
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openChatModal({
+                              boardId: board.id,
+                              boardName: board.boardName,
+                              recipientId: board.sellerId || 'seller-1',
+                              recipientName: board.sellerName,
+                            });
+                          }}
+                          className="min-h-[44px] px-3.5 py-2 rounded-full border border-sky-200 bg-sky-50/60 hover:bg-sky-100 text-sky-800 text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5 text-sky-600" />
+                          <span>Chat</span>
+                        </button>
 
                         <button
                           onClick={(e) => {
