@@ -55,7 +55,6 @@ import {
   supabaseVerifyPhoneOtp,
   supabaseCreateSupportTicket,
   supabaseFetchSupportTickets,
-  quickGoogleProfileSignIn,
   restoreSupabaseAuthSession,
   supabaseUpdateProfile,
 } from '../services/harvestApi';
@@ -244,13 +243,6 @@ interface HarvestStoreContextValue {
     state?: string
   ) => Promise<{ error: string | null }>;
   signInWithGoogle: () => Promise<{ error: string | null }>;
-  quickGoogleSignIn: (
-    email: string,
-    fullName: string,
-    phone?: string,
-    district?: string,
-    state?: string
-  ) => Promise<{ error: string | null }>;
   isSignedIn: boolean;
   signOut: () => void;
   connectionMode: ConnectionMode;
@@ -757,28 +749,6 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const signInWithGoogle = async () => {
     return supabaseSignInWithGoogle();
-  };
-
-  const quickGoogleSignIn = async (
-    email: string,
-    fullName: string,
-    phone = '',
-    district = 'Chennai',
-    state = 'Tamil Nadu'
-  ) => {
-    const { profile, error } = await quickGoogleProfileSignIn(
-      email,
-      fullName,
-      phone,
-      district,
-      state
-    );
-    if (profile) {
-      setCurrentUser(profile);
-      syncUserAccountBackend(profile).catch(() => undefined);
-      setActiveTab('MARKETPLACE');
-    }
-    return { error };
   };
 
   const signOut = () => {
@@ -1801,7 +1771,6 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         sendPhoneOtp,
         verifyPhoneOtp,
         signInWithGoogle,
-        quickGoogleSignIn,
         isSignedIn,
         signOut,
         connectionMode,

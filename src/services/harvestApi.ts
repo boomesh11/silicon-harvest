@@ -420,9 +420,10 @@ export async function upsertProfileRecord(
   }
 ): Promise<UserProfile> {
   const fallback: UserProfile = {
-    id: profile.id || `USR-${Date.now().toString(36).toUpperCase()}`,
+    id: profile.id || profile.authUserId || `USR-${Date.now().toString(36).toUpperCase()}`,
     email: profile.email,
     fullName: profile.fullName,
+    avatarUrl: profile.avatarUrl,
     role: profile.role,
     organization: profile.organization || '',
     phone: profile.phone || '',
@@ -741,76 +742,38 @@ export async function supabaseVerifyPhoneOtp(
 }
 
 // ---------------------------------------------------------------------------
-// Google
+// Google OAuth (Direct Native Redirect)
 // ---------------------------------------------------------------------------
 
 /**
- * Real Supabase Google OAuth. Only invoked when VITE_GOOGLE_OAUTH_ENABLED is
- * 'true' — otherwise Supabase hard-redirects to a raw JSON 400 error page.
+ * Direct Native Supabase Google OAuth Redirect.
+ * Navigates straight to Google's account chooser and redirects back to window.location.origin.
  */
 export async function supabaseSignInWithGoogle(): Promise<{ error: string | null }> {
   try {
-    if (!GOOGLE_OAUTH_ENABLED) {
-      return { error: 'GOOGLE_OAUTH_DISABLED' };
-    }
     const client = getSupabaseClient();
     if (!client) return { error: 'Sign-in service is temporarily unavailable.' };
-    const { data, error } = await client.auth.signInWithOAuth({
+    const { error } = await client.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: window.location.origin,
-        skipBrowserRedirect: true,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'select_account',
+        },
       },
     });
-    if (error || !data?.url) {
-      return { error: error ? error.message : 'GOOGLE_OAUTH_DISABLED' };
+    if (error) {
+      return { error: error.message };
     }
-    window.location.assign(data.url);
     return { error: null };
   } catch (err: any) {
-    return { error: err?.message || 'GOOGLE_OAUTH_DISABLED' };
+    return { error: err?.message || 'Google OAuth sign-in failed' };
   }
 }
 
 /**
- * In-modal Google account quick sign-in (no redirect). Creates or signs in
- * to the profile in public.profiles keyed on the Google email.
- */
-export async function quickGoogleProfileSignIn(
-  email: string,
-  fullName: string,
-  phone = '',
-  district = 'Chennai',
-  state = 'Tamil Nadu',
-  pincode = '600001'
-): Promise<{ profile: UserProfile | null; error: string | null }> {
-  const cleanEmail = email.trim().toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
-    return { profile: null, error: 'Please enter a valid Google email address.' };
-  }
-  if (!fullName.trim()) {
-    return { profile: null, error: 'Please enter your full name.' };
-  }
-  const cleanDigits = phone.replace(/\D/g, '').slice(-10);
-  const formattedPhone = cleanDigits.length === 10 ? `+91 ${cleanDigits}` : '';
-  const profile = await upsertProfileRecord({
-    email: cleanEmail,
-    fullName: fullName.trim(),
-    role: 'BUYER_STUDENT',
-    organization: '',
-    phone: formattedPhone,
-    defaultAddress: `${district}, ${state}`,
-    state,
-    district,
-    pincode,
-    authMethod: 'GOOGLE_QUICK',
-    isSupabaseAuthenticated: false,
-  });
-  return { profile, error: null };
-}
-
-/**
- * Restore a real Supabase OAuth session after redirect (when OAuth enabled).
+ * Restore a real Supabase OAuth session after redirect.
  */
 export async function restoreSupabaseAuthSession(): Promise<UserProfile | null> {
   const client = getSupabaseClient();
@@ -820,9 +783,11 @@ export async function restoreSupabaseAuthSession(): Promise<UserProfile | null> 
   if (!user || !user.email) return null;
   const meta = user.user_metadata || {};
   const provider = (user.app_metadata?.provider as string) || 'email';
-  return upsertProfileRecord({
+  const profile = await upsertProfileRecord({
+    id: user.id,
     email: user.email.toLowerCase(),
     fullName: meta.full_name || meta.name || user.email.split('@')[0],
+    avatarUrl: meta.avatar_url || meta.picture,
     role: 'BUYER_STUDENT',
     organization: '',
     phone: meta.phone || '',
@@ -831,4 +796,9 @@ export async function restoreSupabaseAuthSession(): Promise<UserProfile | null> 
     authMethod: provider === 'google' ? 'GOOGLE_OAUTH' : provider === 'phone' ? 'PHONE_SMS' : 'EMAIL',
     isSupabaseAuthenticated: true,
   });
+  return {
+    ...profile,
+    id: user.id || profile.id,
+    avatarUrl: meta.avatar_url || meta.picture || profile.avatarUrl,
+  };
 }
