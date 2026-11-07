@@ -21,7 +21,13 @@ const MainShell: React.FC = () => {
   const { activeTab, setActiveTab } = useHarvestStore();
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F5F5F7] text-[#1D1D1F] relative overflow-x-hidden w-full m-0 p-0">
+    <div
+      className={`flex flex-col bg-[#F5F5F7] text-[#1D1D1F] relative overflow-x-hidden w-full m-0 p-0 ${
+        activeTab === 'LOGIN'
+          ? 'h-screen overflow-hidden'
+          : 'min-h-screen'
+      }`}
+    >
       {/* Subtle Ambient Daylight Pastel Glow Orbs */}
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
         <div className="absolute -top-48 left-1/2 -translate-x-1/2 w-[780px] h-[420px] bg-emerald-400/15 rounded-full blur-[140px]" />
