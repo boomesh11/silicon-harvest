@@ -16,6 +16,13 @@ import {
   Check,
   X,
   Truck,
+  MessageCircle,
+  PhoneCall,
+  Crown,
+  TrendingDown,
+  ArrowRight,
+  ShieldCheck,
+  CheckCircle,
 } from 'lucide-react';
 import { useHarvestStore } from '../store/useHarvestStore';
 import {
@@ -34,8 +41,14 @@ import {
 } from '../data/catalogPricing';
 
 export const MarketplacePortal: React.FC = () => {
-  const { boards, components, setActiveTab, placeOrder, currentUser } =
-    useHarvestStore();
+  const {
+    boards,
+    components,
+    setActiveTab,
+    placeOrder,
+    submitBargainOffer,
+    currentUser,
+  } = useHarvestStore();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<
@@ -48,6 +61,12 @@ export const MarketplacePortal: React.FC = () => {
   const [viewMode, setViewMode] = useState<'COMPONENT_VIEW' | 'BOARD_VIEW'>(
     'COMPONENT_VIEW'
   );
+
+  // Bargain Modal State
+  const [bargainTargetBoard, setBargainTargetBoard] = useState<DonorBoard | null>(null);
+  const [bargainOfferAmount, setBargainOfferAmount] = useState<number>(0);
+  const [bargainNote, setBargainNote] = useState<string>('');
+  const [bargainSuccessMsg, setBargainSuccessMsg] = useState<string | null>(null);
 
   // Bulk Component Cart state
   const [bulkCartIds, setBulkCartIds] = useState<string[]>([]);
@@ -229,30 +248,94 @@ export const MarketplacePortal: React.FC = () => {
     }
   };
 
+  const handleBargainSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bargainTargetBoard) return;
+    submitBargainOffer({
+      boardId: bargainTargetBoard.id,
+      boardName: bargainTargetBoard.boardName,
+      buyerId: currentUser.id,
+      buyerName: currentUser.fullName || 'Verified Buyer',
+      buyerPhone: currentUser.phone || '+91 98401 23456',
+      buyerDistrict: currentUser.district || 'Chennai',
+      sellerName: bargainTargetBoard.sellerName,
+      sellerPhone: bargainTargetBoard.sellerPhone || '+91 98401 23456',
+      sellerDistrict: bargainTargetBoard.sellerDistrict || 'Chennai',
+      originalPriceInr: bargainTargetBoard.rawBoardPriceInr,
+      offeredPriceInr: bargainOfferAmount,
+      note: bargainNote.trim(),
+    });
+    setBargainSuccessMsg(`Bargain offer of ₹${bargainOfferAmount} submitted to ${bargainTargetBoard.sellerName}! You can track it under "My Orders & Bargains".`);
+    setTimeout(() => {
+      setBargainSuccessMsg(null);
+      setBargainTargetBoard(null);
+    }, 3500);
+  };
+
   return (
     <div className="space-y-12">
-      {/* Apple Daylight Hero Section */}
-      <section className="pt-8 pb-4 md:py-14 text-center space-y-6">
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/90 border border-slate-200/80 shadow-sm text-xs text-slate-600 font-medium">
-          <span className="w-2 h-2 rounded-full bg-emerald-500" />
-          <span>Certified Semiconductor Recovery • Multimeter Verified</span>
+      {/* Recykal.Market Circular Economy Story & Action Bar */}
+      <section className="pt-4 pb-2 md:pt-6 text-center space-y-6">
+        <div className="rounded-3xl border border-slate-800 bg-[#0F172A] p-6 sm:p-10 text-white shadow-xl relative overflow-hidden text-left">
+          <div className="absolute inset-0 bg-radial-gradient from-emerald-500/10 via-transparent to-transparent pointer-events-none" />
+          <div className="relative z-10 max-w-4xl mx-auto space-y-4 text-center sm:text-left">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold uppercase tracking-wider">
+              <Sparkles className="w-3.5 h-3.5" />
+              Recykal-Standard Circular Electronics Marketplace
+            </div>
+            <h1 className="text-xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-white leading-[1.25]">
+              &ldquo;Valuable Components Get Lost the Moment They Stop Moving. SiliconHarvest Keeps Them Moving — Across One Connected, Traceable Network.&rdquo;
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-300 max-w-2xl">
+              India&apos;s verified circular network for ICs, washing machine &amp; appliance parts, battery packs, and donor motherboards with same-district 45-min dispatch.
+            </p>
+
+            {/* 4-Pillar Action Bar */}
+            <div className="pt-3 grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 text-left">
+              <div
+                onClick={() => setActiveTab('SELLER_PORTAL')}
+                className="cursor-pointer rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 p-3.5 active:scale-95 transition-all shadow-sm"
+              >
+                <div className="text-[11px] font-black uppercase tracking-wider text-emerald-400">1. SELL SPARES</div>
+                <div className="text-xs font-bold text-white mt-1">List in 30 Seconds →</div>
+                <div className="text-[11px] text-slate-400 mt-0.5">Automated fair pricing</div>
+              </div>
+
+              <div
+                onClick={() => {
+                  const el = document.getElementById('catalog-search-bar');
+                  el?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="cursor-pointer rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 p-3.5 active:scale-95 transition-all shadow-sm"
+              >
+                <div className="text-[11px] font-black uppercase tracking-wider text-emerald-400">2. PROCURE PARTS</div>
+                <div className="text-xs font-bold text-white mt-1">Browse Catalog ↓</div>
+                <div className="text-[11px] text-slate-400 mt-0.5">Tested ICs &amp; boards</div>
+              </div>
+
+              <div
+                onClick={() => setActiveTab('MEMBERSHIP')}
+                className="cursor-pointer rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 p-3.5 active:scale-95 transition-all shadow-sm"
+              >
+                <div className="text-[11px] font-black uppercase tracking-wider text-amber-400">3. BARGAIN &amp; CONNECT</div>
+                <div className="text-xs font-bold text-white mt-1">Unlock WhatsApp ⭐</div>
+                <div className="text-[11px] text-slate-400 mt-0.5">Direct seller contact</div>
+              </div>
+
+              <div
+                onClick={() => setActiveTab('ORDERS_TRACKER')}
+                className="cursor-pointer rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 p-3.5 active:scale-95 transition-all shadow-sm"
+              >
+                <div className="text-[11px] font-black uppercase tracking-wider text-emerald-400">4. TRACK DISPATCH</div>
+                <div className="text-xs font-bold text-white mt-1">Live Courier Status →</div>
+                <div className="text-[11px] text-slate-400 mt-0.5">Rapido &amp; India Post</div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <h1 className="text-4xl sm:text-5xl md:text-6xl font-semibold tracking-tight text-[#1D1D1F] max-w-3xl mx-auto leading-[1.08]">
-          Salvage Precision.{' '}
-          <span className="bg-gradient-to-r from-emerald-600 via-teal-600 to-slate-800 bg-clip-text text-transparent">
-            Zero Waste.
-          </span>
-        </h1>
-
-        <p className="text-slate-600 text-sm md:text-base leading-relaxed max-w-2xl mx-auto">
-          Harvest genuine, bench-tested integrated circuits from fault-isolated
-          donor boards—or acquire complete raw PCBs for hardware jumper bypass
-          hacks at a fraction of retail cost.
-        </p>
-
         {/* Floating Frosted Glass Search & Filter Console */}
-        <div className="max-w-4xl mx-auto pt-4 space-y-3 sm:space-y-4">
+        <div id="catalog-search-bar" className="max-w-4xl mx-auto pt-2 space-y-3 sm:space-y-4">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             {/* Search Input (16px on mobile prevents auto-zoom) */}
             <div className="relative flex-1">
@@ -486,6 +569,52 @@ export const MarketplacePortal: React.FC = () => {
                           {parentBoard.distanceKm} km
                         </span>
                       </div>
+
+                      {/* Seller & Verified Recycler Contact Block */}
+                      <div className="pt-2 border-t border-slate-100 space-y-2">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-semibold text-slate-700 truncate">{parentBoard.sellerName}</span>
+                          {parentBoard.isVerified && (
+                            <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                              <CheckCircle className="w-2.5 h-2.5" /> Verified
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Pro Unlocked Contact vs Masked */}
+                        {currentUser.isProMember ? (
+                          <div className="flex items-center justify-between p-2 rounded-xl bg-emerald-50/70 border border-emerald-200 text-xs">
+                            <span className="font-mono font-bold text-slate-800 text-[11px]">
+                              📞 {parentBoard.sellerPhone || '+91 98401 23456'}
+                            </span>
+                            <a
+                              href={`https://wa.me/91${(parentBoard.sellerPhone || '9840123456').replace(/\D/g, '').slice(-10)}?text=Hi%20${encodeURIComponent(parentBoard.sellerName)},%20interested%20in%20${encodeURIComponent(comp.partNumber)}%20from%20SiliconHarvest`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shadow-xs active:scale-95 transition-all"
+                            >
+                              <MessageCircle className="w-3 h-3" />
+                              <span>WhatsApp</span>
+                            </a>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+                            <span className="font-mono text-slate-400 text-[11px]">📞 +91 9840X XXXXX</span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveTab('MEMBERSHIP');
+                              }}
+                              className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 px-2 py-1 rounded-lg active:scale-95 transition-all"
+                            >
+                              <Crown className="w-3 h-3 text-amber-600" />
+                              <span>Unlock (Pro ⭐)</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {/* Bypass Hack Pill if applicable */}
@@ -581,6 +710,22 @@ export const MarketplacePortal: React.FC = () => {
                         </>
                       )}
                     </button>
+
+                    {parentBoard.allowBargain && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setBargainTargetBoard(parentBoard);
+                          setBargainOfferAmount(Math.max(10, Math.round(comp.partPriceInr * 0.85)));
+                          setBargainNote(`Inquiring about ${comp.partNumber}`);
+                        }}
+                        className="w-full min-h-[40px] py-2 px-3 rounded-2xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-xs"
+                      >
+                        <TrendingDown className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Bargain Price / Make Counter-Offer</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -733,8 +878,53 @@ export const MarketplacePortal: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Seller & Verified Recycler Contact Block */}
+                <div className="pt-2 border-t border-slate-100 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-700">{board.sellerName}</span>
+                    {board.isVerified && (
+                      <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 text-[11px]">
+                        <CheckCircle className="w-2.5 h-2.5" /> Verified Recycler
+                      </span>
+                    )}
+                  </div>
+
+                  {currentUser.isProMember ? (
+                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-50/70 border border-emerald-200 text-xs">
+                      <span className="font-mono font-bold text-slate-800 text-xs">
+                        📞 {board.sellerPhone || '+91 98401 23456'}
+                      </span>
+                      <a
+                        href={`https://wa.me/91${(board.sellerPhone || '9840123456').replace(/\D/g, '').slice(-10)}?text=Hi%20${encodeURIComponent(board.sellerName)},%20interested%20in%20${encodeURIComponent(board.boardName)}%20from%20SiliconHarvest`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs active:scale-95 transition-all"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" />
+                        <span>Direct WhatsApp</span>
+                      </a>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+                      <span className="font-mono text-slate-400 text-xs">📞 +91 9840X XXXXX</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveTab('MEMBERSHIP');
+                        }}
+                        className="inline-flex items-center gap-1 text-xs font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-lg active:scale-95 transition-all"
+                      >
+                        <Crown className="w-3 h-3 text-amber-600" />
+                        <span>Unlock WhatsApp (Pro ⭐)</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 {/* Footer Location + Dual CTA */}
-                <div className="mt-6 pt-5 border-t border-slate-200/80 flex flex-wrap items-center justify-between gap-3">
+                <div className="mt-4 pt-4 border-t border-slate-200/80 flex flex-wrap items-center justify-between gap-3">
                   <div className="text-xs text-slate-600 flex items-center gap-1.5">
                     <MapPin className="w-3.5 h-3.5 text-emerald-600" />
                     <span>
@@ -748,6 +938,22 @@ export const MarketplacePortal: React.FC = () => {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                    {board.allowBargain && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setBargainTargetBoard(board);
+                          setBargainOfferAmount(Math.round(board.rawBoardPriceInr * 0.85));
+                          setBargainNote(`Proposing bargain on ${board.boardName}`);
+                        }}
+                        className="min-h-[44px] px-3.5 py-2 rounded-full border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+                      >
+                        <TrendingDown className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Bargain</span>
+                      </button>
+                    )}
+
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -1049,6 +1255,119 @@ export const MarketplacePortal: React.FC = () => {
           </div>
         );
       })()}
+      {/* Interactive Bargain & Counter-Offer Modal */}
+      {bargainTargetBoard && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-lg rounded-3xl bg-white p-6 sm:p-8 shadow-2xl border border-slate-200 space-y-5 animate-scaleUp">
+            <button
+              type="button"
+              onClick={() => {
+                setBargainTargetBoard(null);
+                setBargainSuccessMsg(null);
+              }}
+              className="absolute top-5 right-5 p-2 rounded-full text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 transition-all"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div>
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800 border border-amber-300">
+                <Crown className="w-3.5 h-3.5 text-amber-600" />
+                Recykal Pro Bargain Engine
+              </div>
+              <h3 className="mt-2 text-xl font-black text-slate-900">Make an Offer / Propose Discount</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Negotiate directly with <strong>{bargainTargetBoard.sellerName}</strong> for <strong>{bargainTargetBoard.boardName}</strong>.
+              </p>
+            </div>
+
+            {bargainSuccessMsg ? (
+              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-bold space-y-2">
+                <p>{bargainSuccessMsg}</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBargainTargetBoard(null);
+                    setBargainSuccessMsg(null);
+                    setActiveTab('ORDERS_TRACKER');
+                  }}
+                  className="mt-2 w-full py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs"
+                >
+                  View in My Orders &amp; Bargains →
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleBargainSubmit} className="space-y-4">
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500">Listed Price:</span>
+                    <span className="font-mono line-through text-slate-400">₹{bargainTargetBoard.rawBoardPriceInr}</span>
+                  </div>
+
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-bold text-slate-800">Your Proposed Counter-Price:</span>
+                    <span className="text-2xl font-black text-emerald-600">₹{bargainOfferAmount}</span>
+                  </div>
+
+                  <input
+                    type="range"
+                    min={Math.round(bargainTargetBoard.rawBoardPriceInr * 0.4)}
+                    max={bargainTargetBoard.rawBoardPriceInr}
+                    step={5}
+                    value={bargainOfferAmount}
+                    onChange={(e) => setBargainOfferAmount(Number(e.target.value))}
+                    className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                  />
+
+                  <div className="flex justify-between text-[11px] font-mono text-slate-400">
+                    <span>Min: ₹{Math.round(bargainTargetBoard.rawBoardPriceInr * 0.4)}</span>
+                    <span className="text-emerald-700 font-bold">
+                      Discount: {Math.round(((bargainTargetBoard.rawBoardPriceInr - bargainOfferAmount) / bargainTargetBoard.rawBoardPriceInr) * 100)}% Off
+                    </span>
+                    <span>Max: ₹{bargainTargetBoard.rawBoardPriceInr}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 block">Note for Seller (Optional):</label>
+                  <input
+                    type="text"
+                    value={bargainNote}
+                    onChange={(e) => setBargainNote(e.target.value)}
+                    placeholder="e.g. Student buying for final-year project, can pick up today"
+                    className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                {!currentUser.isProMember && (
+                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 flex items-start gap-2">
+                    <Crown className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <span>
+                      Tip: Pro Members get instant counter-offer notifications and ₹0 convenience fee at checkout. You can still test this offer!
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setBargainTargetBoard(null)}
+                    className="flex-1 min-h-[44px] py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 min-h-[44px] py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md active:scale-95 transition-all"
+                  >
+                    Submit Counter-Offer (₹{bargainOfferAmount})
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

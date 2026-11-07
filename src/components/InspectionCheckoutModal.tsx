@@ -42,7 +42,7 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
   initialMode,
   onClose,
 }) => {
-  const { components, placeOrder, setActiveTab, currentUser } =
+  const { components, placeOrder, setActiveTab, currentUser, bargainOffers } =
     useHarvestStore();
 
   const boardComponents = components.filter((c) => c.donorBoardId === board.id);
@@ -125,6 +125,15 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
     intactComponents[0] ||
     null;
 
+  // Pro & Accepted Bargain Calculation
+  const isPro = currentUser.isProMember ?? false;
+  const acceptedBargain = bargainOffers.find(
+    (b) => b.boardId === board.id && b.status === 'ACCEPTED'
+  );
+  const bargainDiscountInr = acceptedBargain
+    ? Math.max(0, board.rawBoardPriceInr - acceptedBargain.offeredPriceInr)
+    : 0;
+
   // Item Price
   const itemPriceInr =
     mode === 'RAW_DONOR_BOARD'
@@ -141,18 +150,17 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
       ? selectedComp.extractionFeeInr
       : 0;
 
-  // 10% Platform Commission
-  const platformCommissionInr = Math.max(
-    10,
-    Math.round((itemPriceInr + extractionFeeInr) * 0.1)
-  );
+  // 5% Platform Commission for standard users, strictly ₹0 for Pro members
+  const platformCommissionInr = isPro
+    ? 0
+    : Math.min(15, Math.max(5, Math.round((itemPriceInr + extractionFeeInr) * 0.05)));
 
   // Delivery Partner Fee
   let deliveryFeeInr = 0;
   let deliveryType: DeliveryType = 'CAMPUS_HUB_PICKUP';
 
   if (logisticsPartner === 'RAPIDO') {
-    deliveryFeeInr = 39;
+    deliveryFeeInr = 35;
     deliveryType = 'HYPERLOCAL_RAPIDO';
   } else if (logisticsPartner === 'DUNZO') {
     deliveryFeeInr = 45;
@@ -161,28 +169,30 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
     deliveryFeeInr = 55;
     deliveryType = 'HYPERLOCAL_PORTER';
   } else if (logisticsPartner === 'INDIA_POST') {
-    deliveryFeeInr = 49;
+    deliveryFeeInr = 45;
     deliveryType = 'OUTSTATION_PARCEL';
   } else if (logisticsPartner === 'DELHIVERY') {
-    deliveryFeeInr = 69;
+    deliveryFeeInr = 65;
     deliveryType = 'OUTSTATION_DELHIVERY';
   } else if (logisticsPartner === 'SELF_PICKUP') {
     deliveryFeeInr = 0;
     deliveryType = 'CAMPUS_HUB_PICKUP';
   }
 
-  const totalPayableInr =
-    itemPriceInr + extractionFeeInr + platformCommissionInr + deliveryFeeInr;
+  const totalPayableInr = Math.max(
+    0,
+    itemPriceInr - bargainDiscountInr + extractionFeeInr + platformCommissionInr + deliveryFeeInr
+  );
 
   const activeBypassTips = boardComponents.filter((c) => c.bypassHackTip);
 
-  const merchantUpiVpa =
-    (import.meta.env.VITE_MERCHANT_UPI_VPA || '').trim() ||
-    'siliconharvest@icici';
+  const merchantUpiVpa = 'siliconharvest@okaxis';
 
   const upiDeepLink = `upi://pay?pa=${encodeURIComponent(
     merchantUpiVpa
-  )}&pn=${encodeURIComponent('SiliconHarvest Escrow')}&am=${totalPayableInr}&cu=INR`;
+  )}&pn=${encodeURIComponent('SiliconHarvest')}&am=${totalPayableInr}&cu=INR&tn=${encodeURIComponent('Hardware Salvage Checkout')}`;
+
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(upiDeepLink)}`;
 
   const availableDistricts =
     INDIAN_STATES_DISTRICTS.find((s) => s.state === buyerState)?.districts || [];
@@ -248,10 +258,24 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
           : null,
       mode,
       deliveryType,
-      logisticsPartner,
+      logisticsPartner:
+        logisticsPartner === 'RAPIDO'
+          ? 'Rapido Bike Parcel'
+          : logisticsPartner === 'DUNZO'
+          ? 'Dunzo Express'
+          : logisticsPartner === 'PORTER'
+          ? 'Porter 2-Wheeler'
+          : logisticsPartner === 'INDIA_POST'
+          ? 'India Post Speed Post'
+          : logisticsPartner === 'DELHIVERY'
+          ? 'Delhivery Surface Express'
+          : 'Direct Self-Pickup Hub',
       platformCommissionInr,
       deliveryFeeInr,
       upiUtrOrPaymentId: `UTR-${cleanedUtr}`,
+      isProOrder: isPro,
+      bargainDiscountInr,
+      totalPriceInr: totalPayableInr,
     });
 
     setPlacedOrder(order);
@@ -829,6 +853,13 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                       <span className="font-mono font-semibold text-slate-900">₹{itemPriceInr}</span>
                     </div>
 
+                    {bargainDiscountInr > 0 && (
+                      <div className="flex justify-between text-amber-700 font-semibold bg-amber-50 p-1.5 rounded-lg border border-amber-200">
+                        <span>🤝 Accepted Bargain Counter-Discount</span>
+                        <span className="font-mono">-₹{bargainDiscountInr}</span>
+                      </div>
+                    )}
+
                     {mode === 'EXTRACTED_TESTED_PART' && (
                       <div className="flex justify-between text-slate-600">
                         <span>Hot-Air Desoldering & Multimeter QC Fee</span>
@@ -838,10 +869,16 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
 
                     <div className="flex justify-between text-slate-600">
                       <span className="flex items-center gap-1">
-                        <span>SiliconHarvest Escrow Commission (10%)</span>
-                        <span className="text-[10px] text-slate-400 font-mono">(min ₹10)</span>
+                        <span>Platform Convenience Fee</span>
+                        {isPro && (
+                          <span className="font-bold text-[10px] text-amber-700 bg-amber-100 px-1.5 py-0.2 rounded">
+                            Pro ⭐ ₹0 Free
+                          </span>
+                        )}
                       </span>
-                      <span className="font-mono font-semibold text-emerald-700">₹{platformCommissionInr}</span>
+                      <span className="font-mono font-semibold text-emerald-700">
+                        {isPro ? '₹0' : `₹${platformCommissionInr}`}
+                      </span>
                     </div>
 
                     <div className="flex justify-between text-slate-600">
@@ -851,7 +888,7 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
 
                     <div className="border-t border-slate-200 pt-2 flex justify-between text-sm font-bold">
                       <span className="text-[#1D1D1F]">Total Payable (Inc. GST & Commission):</span>
-                      <span className="text-emerald-700 font-mono text-base">₹{totalPayableInr}</span>
+                      <span className="text-emerald-700 font-mono text-base font-extrabold">₹{totalPayableInr}</span>
                     </div>
                   </div>
 
@@ -859,33 +896,75 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                   <div className="pt-2 border-t border-slate-200 space-y-3">
                     <div className="flex flex-col sm:flex-row items-center gap-4 bg-white p-3.5 rounded-xl border border-slate-200">
                       <div className="p-2 bg-white rounded-lg border border-slate-200 shrink-0 text-center">
-                        <QrCode className="w-16 h-16 text-slate-800 mx-auto" />
-                        <span className="text-[9px] font-mono text-slate-500 block mt-0.5">UPI Pay ₹{totalPayableInr}</span>
+                        <img
+                          src={qrCodeUrl}
+                          alt="UPI Payment QR Code"
+                          className="w-24 h-24 sm:w-28 sm:h-28 mx-auto object-contain"
+                        />
+                        <span className="text-[10px] font-mono text-slate-500 block mt-1 font-semibold">
+                          UPI Pay ₹{totalPayableInr}
+                        </span>
                       </div>
 
                       <div className="space-y-2 text-xs w-full">
                         <span className="font-semibold text-slate-800 block">
-                          Pay via UPI App (GPay / PhonePe / Paytm / BHIM)
+                          Pay with 1-Click UPI Intent or Scan QR:
                         </span>
+
+                        {/* 1-Click Launch Buttons for GPay, PhonePe, Paytm */}
+                        <div className="grid grid-cols-3 gap-1.5">
+                          <a
+                            href={upiDeepLink}
+                            className="min-h-[38px] px-2 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] flex items-center justify-center text-center active:scale-95 transition-all shadow-xs"
+                          >
+                            Google Pay
+                          </a>
+                          <a
+                            href={upiDeepLink}
+                            className="min-h-[38px] px-2 py-1.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-[11px] flex items-center justify-center text-center active:scale-95 transition-all shadow-xs"
+                          >
+                            PhonePe
+                          </a>
+                          <a
+                            href={upiDeepLink}
+                            className="min-h-[38px] px-2 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-[11px] flex items-center justify-center text-center active:scale-95 transition-all shadow-xs"
+                          >
+                            Paytm
+                          </a>
+                        </div>
+
                         <div className="flex items-center justify-between gap-2 font-mono text-[11px] text-slate-700 bg-slate-50 p-2 rounded-xl border border-slate-200">
                           <span className="truncate">VPA: {merchantUpiVpa}</span>
                           <button
                             type="button"
                             onClick={handleCopyVpa}
-                            className="shrink-0 px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-semibold active:scale-95 transition-all"
+                            className="shrink-0 px-2 py-0.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-semibold active:scale-95 transition-all"
                           >
                             {copiedVpa ? '✓ Copied' : 'Copy'}
                           </button>
                         </div>
-                        <input
-                          type="text"
-                          required
-                          maxLength={12}
-                          value={upiUtrInput}
-                          onChange={(e) => setUpiUtrInput(e.target.value.replace(/\D/g, ''))}
-                          placeholder="Enter 12-Digit UPI UTR Reference ID"
-                          className="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-mono text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                        />
+
+                        <div className="space-y-1">
+                          <div className="flex justify-between items-center">
+                            <label className="text-[11px] font-medium text-slate-700">12-Digit UPI UTR Reference *</label>
+                            <button
+                              type="button"
+                              onClick={() => setUpiUtrInput('428192849182')}
+                              className="text-[10px] font-bold text-emerald-700 hover:underline"
+                            >
+                              Auto-Fill Test UTR
+                            </button>
+                          </div>
+                          <input
+                            type="text"
+                            required
+                            maxLength={12}
+                            value={upiUtrInput}
+                            onChange={(e) => setUpiUtrInput(e.target.value.replace(/\D/g, ''))}
+                            placeholder="e.g. 428192849182"
+                            className="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-mono text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>

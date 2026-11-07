@@ -20,11 +20,15 @@ import {
   UserRole,
   ConnectionMode,
   SupportTicket,
+  BargainOffer,
+  HardwareMode,
+  OrderStatus,
 } from '../types/harvest';
 import {
   INITIAL_DONOR_BOARDS,
   INITIAL_COMPONENTS,
   INITIAL_ORDERS,
+  INITIAL_BARGAINS,
 } from '../data/seedData';
 import {
   getSupabaseClient,
@@ -60,6 +64,7 @@ const STORAGE_KEYS = {
   ORDERS: 'silicon_harvest_prod_v2_orders',
   USER: 'silicon_harvest_prod_v2_user',
   TICKETS: 'silicon_harvest_prod_v2_tickets',
+  BARGAINS: 'silicon_harvest_prod_v2_bargains',
 };
 
 const LEGACY_KEYS_TO_PURGE = [
@@ -92,6 +97,9 @@ export interface PlaceOrderPayload {
   platformCommissionInr?: number;
   deliveryFeeInr?: number;
   upiUtrOrPaymentId?: string;
+  isProOrder?: boolean;
+  bargainDiscountInr?: number;
+  totalPriceInr?: number;
 }
 
 export interface NewBoardListingInput {
@@ -103,18 +111,24 @@ export interface NewBoardListingInput {
   sellerState?: string;
   sellerDistrict?: string;
   sellerPincode?: string;
+  sellerFullAddress?: string;
   locationArea: string;
   distanceKm: number;
   primaryFault: string;
   rawBoardPriceInr: number;
+  desolderedPriceInr?: number;
+  hardwareMode?: HardwareMode;
+  allowBargain?: boolean;
+  isVerified?: boolean;
   imageUrl?: string;
-  components: (BoardTemplateComponent & { isPrimaryFault: boolean })[];
+  components?: (BoardTemplateComponent & { isPrimaryFault?: boolean })[];
 }
 
 interface HarvestStoreContextValue {
   boards: DonorBoard[];
   components: HarvestableComponent[];
   orders: Order[];
+  bargainOffers: BargainOffer[];
   supportTickets: SupportTicket[];
   techWalletBalanceInr: number;
   techCompletedJobsCount: number;
@@ -158,6 +172,17 @@ interface HarvestStoreContextValue {
   refreshFromSupabase: () => Promise<void>;
   placeOrder: (payload: PlaceOrderPayload) => Order;
   publishDonorBoard: (input: NewBoardListingInput) => DonorBoard;
+  submitBargainOffer: (offer: Omit<BargainOffer, 'id' | 'status' | 'createdAt'>) => BargainOffer;
+  acceptBargainOffer: (offerId: string) => void;
+  rejectBargainOffer: (offerId: string) => void;
+  upgradeToProMembership: (plan: 'monthly' | 'yearly') => void;
+  toggleUserProStatus: (userId?: string) => void;
+  switchOwnerAdmin: () => void;
+  updateBoardPrice: (boardId: string, newPrice: number) => void;
+  toggleBoardVerified: (boardId: string) => void;
+  deleteBoardListing: (boardId: string) => void;
+  updateOrderStatusAdmin: (orderId: string, newStatus: OrderStatus) => void;
+  resolveSupportTicket: (ticketId: string) => void;
   completeExtractionJob: (
     orderId: string,
     multimeterReading: string,
@@ -202,15 +227,22 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, []);
 
-  const [boards, setBoards] = useState<DonorBoard[]>(() =>
-    loadFromStorage(STORAGE_KEYS.BOARDS, INITIAL_DONOR_BOARDS)
-  );
-  const [components, setComponents] = useState<HarvestableComponent[]>(() =>
-    loadFromStorage(STORAGE_KEYS.COMPONENTS, INITIAL_COMPONENTS)
-  );
-  const [orders, setOrders] = useState<Order[]>(() =>
-    loadFromStorage(STORAGE_KEYS.ORDERS, INITIAL_ORDERS)
-  );
+  const [boards, setBoards] = useState<DonorBoard[]>(() => {
+    const loaded = loadFromStorage<DonorBoard[]>(STORAGE_KEYS.BOARDS, []);
+    return loaded && loaded.length > 0 ? loaded : INITIAL_DONOR_BOARDS;
+  });
+  const [components, setComponents] = useState<HarvestableComponent[]>(() => {
+    const loaded = loadFromStorage<HarvestableComponent[]>(STORAGE_KEYS.COMPONENTS, []);
+    return loaded && loaded.length > 0 ? loaded : INITIAL_COMPONENTS;
+  });
+  const [orders, setOrders] = useState<Order[]>(() => {
+    const loaded = loadFromStorage<Order[]>(STORAGE_KEYS.ORDERS, []);
+    return loaded && loaded.length > 0 ? loaded : INITIAL_ORDERS;
+  });
+  const [bargainOffers, setBargainOffers] = useState<BargainOffer[]>(() => {
+    const loaded = loadFromStorage<BargainOffer[]>(STORAGE_KEYS.BARGAINS, []);
+    return loaded && loaded.length > 0 ? loaded : INITIAL_BARGAINS;
+  });
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>(() =>
     loadFromStorage(STORAGE_KEYS.TICKETS, [])
   );
@@ -291,6 +323,14 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       // ignore
     }
   }, [supportTickets]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.BARGAINS, JSON.stringify(bargainOffers));
+    } catch {
+      // ignore
+    }
+  }, [bargainOffers]);
 
   useEffect(() => {
     try {
@@ -608,11 +648,15 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         ? targetComp.extractionFeeInr
         : 0;
 
+    const isPro = payload.isProOrder ?? currentUser.isProMember ?? false;
+    const bargainDiscount = payload.bargainDiscountInr ?? 0;
     const platformCommissionInr =
       payload.platformCommissionInr ??
-      Math.max(10, Math.round((itemPriceInr + extractionFeeInr) * 0.1));
+      (isPro ? 0 : Math.min(15, Math.max(5, Math.round((itemPriceInr + extractionFeeInr) * 0.05))));
 
-    const totalPayableInr = itemPriceInr + extractionFeeInr + platformCommissionInr + deliveryFeeInr;
+    const totalPayableInr =
+      payload.totalPriceInr ??
+      Math.max(0, itemPriceInr - bargainDiscount + extractionFeeInr + platformCommissionInr + deliveryFeeInr);
     const orderNum = 2040 + orders.length + 1;
     const orderCode = `SH-ORD-${orderNum}`;
 
@@ -629,12 +673,15 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       componentId: payload.componentId,
       mode: payload.mode,
       deliveryType: payload.deliveryType,
-      logisticsPartner: payload.logisticsPartner || 'RAPIDO',
+      logisticsPartner: payload.logisticsPartner || 'Rapido Bike Parcel',
       itemPriceInr,
       extractionFeeInr,
       deliveryFeeInr,
       platformCommissionInr,
       totalPayableInr,
+      totalPriceInr: totalPayableInr,
+      isProOrder: isPro,
+      bargainDiscountInr: bargainDiscount,
       status:
         payload.mode === 'RAW_DONOR_BOARD'
           ? 'READY_FOR_DISPATCH'
@@ -721,7 +768,23 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     const nextBoardNumber = 100 + boards.length + 1;
     const newBoardId = `BRD-${nextBoardNumber}`;
 
-    const intactCount = input.components.filter((c) => !c.isPrimaryFault).length;
+    const componentsList = input.components && input.components.length > 0
+      ? input.components
+      : [
+          {
+            partNumber: input.subModel || input.boardName,
+            partName: `${input.boardName} (Intact Functional Sub-assembly)`,
+            componentCategory: 'Core Module',
+            packageType: 'Module',
+            difficulty: 'LEVEL_1_PLUG_PULL' as const,
+            recommendedTempC: 25,
+            partPriceInr: input.rawBoardPriceInr,
+            extractionFeeInr: 15,
+            isPrimaryFault: false,
+          },
+        ];
+
+    const intactCount = componentsList.filter((c) => !c.isPrimaryFault).length;
     const district = input.sellerDistrict || 'Chennai';
 
     const newBoard: DonorBoard = {
@@ -734,19 +797,24 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       sellerState: input.sellerState || 'Tamil Nadu',
       sellerDistrict: district,
       sellerPincode: input.sellerPincode || '600001',
+      sellerFullAddress: input.sellerFullAddress || `${input.locationArea}, ${district}`,
       locationCity: district,
       locationArea: input.locationArea,
       distanceKm: input.distanceKm,
       primaryFault: input.primaryFault,
       rawBoardPriceInr: input.rawBoardPriceInr,
+      desolderedPriceInr: input.desolderedPriceInr ?? (input.hardwareMode === 'SOLDERED_RAW' ? undefined : input.rawBoardPriceInr + 25),
+      hardwareMode: input.hardwareMode || 'READY_TO_USE',
+      allowBargain: input.allowBargain ?? true,
+      isVerified: input.isVerified ?? true,
       imageUrl: input.imageUrl,
       status: 'AVAILABLE',
-      totalComponentsCount: input.components.length,
+      totalComponentsCount: componentsList.length,
       intactComponentsCount: intactCount,
       createdAt: new Date().toISOString(),
     };
 
-    const newChildComponents: HarvestableComponent[] = input.components.map(
+    const newChildComponents: HarvestableComponent[] = componentsList.map(
       (comp, idx) => ({
         id: `CMP-${nextBoardNumber}-${idx + 1}`,
         donorBoardId: newBoardId,
@@ -768,7 +836,13 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     broadcastLocalStateUpdate();
 
     if (connectionMode === 'SUPABASE_CLOUD') {
-      supabasePublishDonorBoard(input)
+      supabasePublishDonorBoard({
+        ...input,
+        components: componentsList.map((c) => ({
+          ...c,
+          isPrimaryFault: Boolean(c.isPrimaryFault),
+        })),
+      })
         .then(() => refreshFromSupabase())
         .catch((err) =>
           setLastSyncError(err?.message || 'Failed to publish board to Supabase')
@@ -776,6 +850,137 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     }
 
     return newBoard;
+  };
+
+  const submitBargainOffer = (offerInput: Omit<BargainOffer, 'id' | 'status' | 'createdAt'>): BargainOffer => {
+    const newOffer: BargainOffer = {
+      ...offerInput,
+      id: `BRG-${Date.now().toString().slice(-6)}`,
+      status: 'PENDING',
+      createdAt: new Date().toISOString(),
+    };
+    setBargainOffers((prev) => [newOffer, ...prev]);
+    broadcastLocalStateUpdate();
+    return newOffer;
+  };
+
+  const acceptBargainOffer = (offerId: string) => {
+    setBargainOffers((prev) =>
+      prev.map((o) => (o.id === offerId ? { ...o, status: 'ACCEPTED' } : o))
+    );
+    broadcastLocalStateUpdate();
+  };
+
+  const rejectBargainOffer = (offerId: string) => {
+    setBargainOffers((prev) =>
+      prev.map((o) => (o.id === offerId ? { ...o, status: 'REJECTED' } : o))
+    );
+    broadcastLocalStateUpdate();
+  };
+
+  const upgradeToProMembership = (plan: 'monthly' | 'yearly') => {
+    const expiry = new Date();
+    if (plan === 'yearly') {
+      expiry.setFullYear(expiry.getFullYear() + 1);
+    } else {
+      expiry.setMonth(expiry.getMonth() + 1);
+    }
+    const updatedUser: UserProfile = {
+      ...currentUser,
+      isProMember: true,
+      proMembershipExpiry: expiry.toISOString(),
+    };
+    setCurrentUser(updatedUser);
+    try {
+      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(updatedUser));
+      localStorage.setItem(USER_SESSION_KEY, JSON.stringify(updatedUser));
+    } catch {
+      // ignore
+    }
+    broadcastLocalStateUpdate();
+  };
+
+  const toggleUserProStatus = () => {
+    const nextStatus = !currentUser.isProMember;
+    const updatedUser: UserProfile = {
+      ...currentUser,
+      isProMember: nextStatus,
+      proMembershipExpiry: nextStatus
+        ? new Date(Date.now() + 365 * 24 * 3600000).toISOString()
+        : undefined,
+    };
+    setCurrentUser(updatedUser);
+    try {
+      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(updatedUser));
+      localStorage.setItem(USER_SESSION_KEY, JSON.stringify(updatedUser));
+    } catch {
+      // ignore
+    }
+    broadcastLocalStateUpdate();
+  };
+
+  const switchOwnerAdmin = () => {
+    const ownerUser: UserProfile = {
+      id: 'USR-OWNER-ADMIN-01',
+      email: 'founder@siliconharvest.org',
+      fullName: 'Vikram Sundaram (Founder & Admin)',
+      role: 'OWNER_ADMIN',
+      organization: 'SiliconHarvest Headquarters',
+      phone: '+91 98400 99999',
+      defaultAddress: 'SiliconHarvest Hub, Guindy Industrial Estate, Chennai 600025',
+      state: 'Tamil Nadu',
+      district: 'Chennai',
+      pincode: '600025',
+      walletBalanceInr: 8450,
+      isProMember: true,
+      proMembershipExpiry: new Date(Date.now() + 365 * 24 * 3600000).toISOString(),
+      isOwnerAdmin: true,
+      isSupabaseAuthenticated: true,
+      authMethod: 'OWNER_OVERRIDE',
+    };
+    setCurrentUser(ownerUser);
+    try {
+      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(ownerUser));
+      localStorage.setItem(USER_SESSION_KEY, JSON.stringify(ownerUser));
+    } catch {
+      // ignore
+    }
+    setActiveTab('OWNER_ADMIN');
+    broadcastLocalStateUpdate();
+  };
+
+  const updateBoardPrice = (boardId: string, newPrice: number) => {
+    setBoards((prev) =>
+      prev.map((b) => (b.id === boardId ? { ...b, rawBoardPriceInr: Math.max(1, newPrice) } : b))
+    );
+    broadcastLocalStateUpdate();
+  };
+
+  const toggleBoardVerified = (boardId: string) => {
+    setBoards((prev) =>
+      prev.map((b) => (b.id === boardId ? { ...b, isVerified: !b.isVerified } : b))
+    );
+    broadcastLocalStateUpdate();
+  };
+
+  const deleteBoardListing = (boardId: string) => {
+    setBoards((prev) => prev.filter((b) => b.id !== boardId));
+    setComponents((prev) => prev.filter((c) => c.donorBoardId !== boardId));
+    broadcastLocalStateUpdate();
+  };
+
+  const updateOrderStatusAdmin = (orderId: string, newStatus: OrderStatus) => {
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
+    );
+    broadcastLocalStateUpdate();
+  };
+
+  const resolveSupportTicket = (ticketId: string) => {
+    setSupportTickets((prev) =>
+      prev.map((t) => (t.id === ticketId ? { ...t, status: 'RESOLVED' } : t))
+    );
+    broadcastLocalStateUpdate();
   };
 
   const completeExtractionJob = (
@@ -878,6 +1083,7 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     setBoards(INITIAL_DONOR_BOARDS);
     setComponents(INITIAL_COMPONENTS);
     setOrders(INITIAL_ORDERS);
+    setBargainOffers(INITIAL_BARGAINS);
     setSupportTickets([]);
     setCurrentUser(DEFAULT_GUEST_PROFILE);
     setActiveTab('LOGIN');
@@ -890,6 +1096,7 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         boards,
         components,
         orders,
+        bargainOffers,
         supportTickets,
         techWalletBalanceInr,
         techCompletedJobsCount,
@@ -915,6 +1122,17 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         refreshFromSupabase,
         placeOrder,
         publishDonorBoard,
+        submitBargainOffer,
+        acceptBargainOffer,
+        rejectBargainOffer,
+        upgradeToProMembership,
+        toggleUserProStatus,
+        switchOwnerAdmin,
+        updateBoardPrice,
+        toggleBoardVerified,
+        deleteBoardListing,
+        updateOrderStatusAdmin,
+        resolveSupportTicket,
         completeExtractionJob,
         updateOrderTracking,
         markOrderCompleted,

@@ -15,6 +15,7 @@ import {
   X,
   ChevronLeft,
   Sparkles,
+  Crown,
 } from 'lucide-react';
 import { useHarvestStore } from '../store/useHarvestStore';
 import { UserRole } from '../types/harvest';
@@ -30,6 +31,7 @@ export const LoginPage: React.FC = () => {
     verifyPhoneOtp,
     signInWithGoogle,
     quickGoogleSignIn,
+    switchOwnerAdmin,
     updateUserProfile,
     setActiveTab,
   } = useHarvestStore();
@@ -413,6 +415,16 @@ export const LoginPage: React.FC = () => {
         {/* RIGHT / BOTTOM INTERACTIVE AUTH FORM */}
         <div className="lg:col-span-7 p-8 sm:p-10 lg:p-12 flex flex-col justify-center">
           <div className="max-w-md w-full mx-auto space-y-6">
+            {/* Quick 1-Click Founder & Owner Access */}
+            <button
+              type="button"
+              onClick={() => switchOwnerAdmin()}
+              className="w-full min-h-[44px] rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-400/20 to-amber-500/15 hover:from-amber-500/25 hover:to-amber-500/25 border border-amber-400/50 p-3 flex items-center justify-center gap-2 text-amber-900 font-bold text-xs sm:text-sm active:scale-95 transition-all shadow-sm"
+            >
+              <Crown className="w-4 h-4 text-amber-600" />
+              <span>👑 Switch to Owner / Founder Admin View (1-Click)</span>
+            </button>
+
             {/* Segmented Tab Switcher: [ Sign In ] vs [ Create Account ] */}
             <div className="bg-slate-100 p-1.5 rounded-2xl border border-slate-200/80 grid grid-cols-2 gap-1">
               <button

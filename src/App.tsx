@@ -11,6 +11,8 @@ import { OrdersTrackerPortal } from './components/OrdersTrackerPortal';
 import { ImpactAnalyticsPortal } from './components/ImpactAnalyticsPortal';
 import { SupportContactPortal } from './components/SupportContactPortal';
 import { LoginPage } from './components/LoginPage';
+import { MembershipPortal } from './components/MembershipPortal';
+import { OwnerAdminPortal } from './components/OwnerAdminPortal';
 import { Leaf, ShieldCheck, Layers, HelpCircle, Truck } from 'lucide-react';
 
 const MainShell: React.FC = () => {
@@ -33,6 +35,8 @@ const MainShell: React.FC = () => {
         {activeTab === 'SELLER_PORTAL' && <SellerPortal />}
         {activeTab === 'TECH_WORKBENCH' && <TechWorkbenchPortal />}
         {activeTab === 'ORDERS_TRACKER' && <OrdersTrackerPortal />}
+        {activeTab === 'MEMBERSHIP' && <MembershipPortal />}
+        {activeTab === 'OWNER_ADMIN' && <OwnerAdminPortal />}
         {activeTab === 'ESG_ANALYTICS' && <ImpactAnalyticsPortal />}
         {activeTab === 'SUPPORT_CONTACT' && <SupportContactPortal />}
       </main>

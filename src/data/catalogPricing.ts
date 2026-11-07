@@ -18,6 +18,10 @@ export interface CatalogCategory {
   shortName: string;
   description: string;
   icon: string;
+  minPrice: number;
+  maxPrice: number;
+  recommendedPrice: number;
+  quickFillChips: string[];
   subModels: string[];
   rawBoardPriceTiers: { price: number; label: string }[];
   defaultExtractionFeeInr: number;
@@ -27,10 +31,21 @@ export interface CatalogCategory {
 export const CATALOG_CATEGORIES: CatalogCategory[] = [
   {
     id: 'IC_MICROCONTROLLERS',
-    name: 'ICs, Microcontrollers & Development Boards',
+    name: 'ICs & Microcontrollers',
     shortName: 'Dev Boards & ICs',
     description: 'Arduino, ESP32, STM32, Raspberry Pi Pico, and Academic Microcontroller Boards',
     icon: 'microchip',
+    minPrice: 15,
+    maxPrice: 250,
+    recommendedPrice: 65,
+    quickFillChips: [
+      'Arduino Uno R3 (ATmega328P)',
+      'ESP32 Wi-Fi + BLE Dev Board',
+      'STM32F103 BluePill Board',
+      'CH340G USB-TTL Interface IC',
+      'AMS1117-3.3V Voltage Regulator',
+      'Raspberry Pi Pico RP2040 Board'
+    ],
     subModels: [
       'Arduino Uno R3 (ATmega328P)',
       'Arduino Nano (CH340G / FTDI)',
@@ -139,10 +154,21 @@ export const CATALOG_CATEGORIES: CatalogCategory[] = [
   },
   {
     id: 'WASHING_MACHINE_APPLIANCE',
-    name: 'Washing Machine, AC, Fridge & Appliance Parts',
+    name: 'Washing Machine & Home Appliance Parts',
     shortName: 'Home Appliances',
     description: 'Inverter boards, relays, pressure sensors, and pumps from washing machines & ACs',
     icon: 'washer',
+    minPrice: 60,
+    maxPrice: 600,
+    recommendedPrice: 180,
+    quickFillChips: [
+      'Washing Machine Inverter Board',
+      'AC Outdoor Inverter Driver PCB',
+      'Submersible Drain Pump 220V',
+      'Water Level Pressure Sensor',
+      '12V 30A Power Relay Pack',
+      'Automatic Door Lock Solenoid'
+    ],
     subModels: [
       'Front-Load Washing Machine Main PCB',
       'Top-Load Washing Machine Control Board',
@@ -259,10 +285,21 @@ export const CATALOG_CATEGORIES: CatalogCategory[] = [
   },
   {
     id: 'BATTERIES_POWER_CELLS',
-    name: 'Batteries, Li-Ion Cells, EV & BMS Modules',
+    name: 'Batteries, Li-Ion Cells & BMS',
     shortName: 'Batteries & BMS',
     description: '18650/21700 cells, smart laptop BMS, LiFePO4 packs, and charge controllers',
     icon: 'battery-charging',
+    minPrice: 35,
+    maxPrice: 450,
+    recommendedPrice: 120,
+    quickFillChips: [
+      '18650 2600mAh Tested Li-Ion Cell',
+      '3S 40A Balance BMS Protection Board',
+      '4S 12V LiFePO4 Battery BMS',
+      'TP4056 1A USB-C Lithium Charger',
+      'Drone LiPo 3S 2200mAh Pack',
+      'Power Bank 10000mAh Dual-USB Board'
+    ],
     subModels: [
       'Dead Laptop Battery Pack (3S / 4S / 6S)',
       'Powerbank Lithium Battery Assembly',
@@ -356,10 +393,21 @@ export const CATALOG_CATEGORIES: CatalogCategory[] = [
   },
   {
     id: 'SMPS_POWER_INVERTERS',
-    name: 'SMPS Power Supplies, Chargers, UPS & Solar Inverters',
+    name: 'SMPS, Chargers & Inverters',
     shortName: 'SMPS & Power Units',
     description: 'MOSFETs, bridge rectifiers, 450V caps, and high-frequency transformers',
     icon: 'zap',
+    minPrice: 30,
+    maxPrice: 350,
+    recommendedPrice: 95,
+    quickFillChips: [
+      '12V 5A Industrial Metal SMPS',
+      '24V 10A CNC High-Power Supply',
+      'Pure Sine Wave 500W Inverter Board',
+      'High-Voltage N-MOSFET (IRFZ44N / IRF3205)',
+      '65W GaN Laptop Charger PCB',
+      '450V 100uF Low-ESR Filter Capacitor'
+    ],
     subModels: [
       'Laptop 65W / 90W Charger PCB',
       'Desktop ATX SMPS Power Supply Board',
@@ -464,10 +512,21 @@ export const CATALOG_CATEGORIES: CatalogCategory[] = [
   },
   {
     id: 'LAPTOP_MOBILE_MOTHERBOARDS',
-    name: 'Laptop, Desktop & Smartphone Motherboards',
-    shortName: 'Motherboards & Logic Boards',
+    name: 'Laptop & Mobile Motherboards/Spares',
+    shortName: 'Motherboards & Spares',
     description: 'Power ICs, charging controllers, Super I/O, BIOS chips, and heatpipes',
     icon: 'laptop',
+    minPrice: 50,
+    maxPrice: 800,
+    recommendedPrice: 220,
+    quickFillChips: [
+      'Dell Latitude i5 Laptop Motherboard',
+      'HP Pavilion Logic Board (RAM & VRM OK)',
+      'Realme / Redmi OLED Display Flex Cable',
+      'Lenovo ThinkPad Backlit Keyboard & TrackPoint',
+      'Wi-Fi 6 + Bluetooth 5.2 M.2 Card',
+      'Laptop CPU Copper Heatpipe + Fan'
+    ],
     subModels: [
       'Dead Laptop Motherboard (Dell / HP / Lenovo / Asus)',
       'Desktop ATX / Micro-ATX Motherboard',
@@ -559,10 +618,21 @@ export const CATALOG_CATEGORIES: CatalogCategory[] = [
   },
   {
     id: 'DISPLAYS_SENSORS_MODULES',
-    name: 'Displays, Cameras, Audio & IoT Sensors',
+    name: 'Displays, Sensors & Audio/TV Boards',
     shortName: 'Displays & Sensors',
     description: 'LCDs, OLEDs, TFT touchscreens, ultrasonic/gas sensors, and Bluetooth modules',
     icon: 'tv',
+    minPrice: 20,
+    maxPrice: 500,
+    recommendedPrice: 110,
+    quickFillChips: [
+      '0.96" I2C 128x64 Blue OLED Display',
+      '16x2 Character LCD + I2C Backpack',
+      'HC-SR04 Ultrasonic Distance Sensor',
+      'DHT22 High-Precision Temp & Humidity Sensor',
+      '5MP Night Vision Camera Module',
+      'MPU-6050 6-Axis Gyroscope Module'
+    ],
     subModels: [
       'Maker Display & Sensor Kit Board',
       'Electronic Weighing Scale / Load Cell Motherboard',
@@ -641,10 +711,21 @@ export const CATALOG_CATEGORIES: CatalogCategory[] = [
   },
   {
     id: 'MOTORS_ROBOTICS_CNC',
-    name: 'Motors, Drivers, 3D Printer & Robotics Hardware',
+    name: 'Motors, Drivers & Robotics',
     shortName: 'Motors & Robotics',
     description: 'NEMA stepper motors, TMC drivers, L298N boards, and heated bed cartridges',
     icon: 'cpu',
+    minPrice: 30,
+    maxPrice: 400,
+    recommendedPrice: 140,
+    quickFillChips: [
+      'NEMA 17 Bipolar Stepper Motor',
+      'TMC2209 Ultra-Silent Stepper Driver',
+      'L298N Dual H-Bridge Motor Driver',
+      'MG996R Metal Gear 15kg Servo Motor',
+      '12V 1000RPM High-Torque DC Motor',
+      '775 Dual Ball-Bearing DC Spindle Motor'
+    ],
     subModels: [
       '3D Printer Controller Board (Ender-3 / RAMPS / SKR)',
       'CNC Router / Laser Engraver Controller PCB',
@@ -723,10 +804,21 @@ export const CATALOG_CATEGORIES: CatalogCategory[] = [
   },
   {
     id: 'AUDIO_TV_CONSUMER',
-    name: 'LED TV Boards, Audio Amplifiers & Routers',
+    name: 'Audio, TV & Telecom Boards',
     shortName: 'Audio, TV & Telecom',
     description: 'Class-D amp ICs, LED backlight drivers, T-Con boards, and high-gain Wi-Fi antennas',
     icon: 'volume-2',
+    minPrice: 20,
+    maxPrice: 500,
+    recommendedPrice: 110,
+    quickFillChips: [
+      'TPA3116D2 2x50W Stereo Bluetooth Amplifier',
+      '32" Smart LED TV Power Supply Board',
+      'PAM8403 2x3W Micro Audio Amplifier',
+      'Bluetooth 5.0 Audio Receiver Board with DAC',
+      'Subwoofer Low-Pass Filter Preamp Board',
+      'Universal LED Backlight Inverter Driver'
+    ],
     subModels: [
       'Smart LED TV Main Logic / T-Con Board (32"-55")',
       'High-Power Hi-Fi Audio Amplifier PCB',

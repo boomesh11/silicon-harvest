@@ -3,7 +3,6 @@ import {
   Leaf,
   Cpu,
   PlusCircle,
-  Flame,
   Truck,
   RotateCcw,
   Wallet,
@@ -16,6 +15,9 @@ import {
   Menu,
   X,
   Layers,
+  Crown,
+  Sparkles,
+  TrendingDown,
 } from 'lucide-react';
 import { useHarvestStore } from '../store/useHarvestStore';
 import { ActiveTab } from '../types/harvest';
@@ -25,12 +27,14 @@ export const Header: React.FC = () => {
   const {
     components,
     orders,
+    bargainOffers,
     techWalletBalanceInr,
     activeTab,
     setActiveTab,
     currentUser,
     isSignedIn,
     updateUserProfile,
+    switchOwnerAdmin,
     signOut,
     resetDemoState,
   } = useHarvestStore();
@@ -41,8 +45,8 @@ export const Header: React.FC = () => {
   const intactComponentsCount = components.filter(
     (c) => c.status === 'INTACT'
   ).length;
-  const pendingExtractionsCount = orders.filter(
-    (o) => o.status === 'PENDING_EXTRACTION'
+  const pendingBargainsCount = bargainOffers.filter(
+    (b) => b.status === 'PENDING'
   ).length;
 
   const navTabs: {
@@ -52,6 +56,7 @@ export const Header: React.FC = () => {
     icon: React.ReactNode;
     badge?: number;
     isAlert?: boolean;
+    isFeatured?: boolean;
   }[] = [
     {
       id: 'MARKETPLACE',
@@ -62,30 +67,36 @@ export const Header: React.FC = () => {
     },
     {
       id: 'SELLER_PORTAL',
-      label: 'Sell Hardware',
+      label: 'Sell a Product',
       shortLabel: 'Sell',
       icon: <PlusCircle className="w-4 h-4" />,
     },
     {
-      id: 'TECH_WORKBENCH',
-      label: 'Workbench',
-      shortLabel: 'Bench',
-      icon: <Flame className="w-4 h-4" />,
-      badge: pendingExtractionsCount,
-      isAlert: pendingExtractionsCount > 0,
-    },
-    {
       id: 'ORDERS_TRACKER',
-      label: 'Orders',
+      label: 'My Orders & Bargains',
       shortLabel: 'Orders',
       icon: <Truck className="w-4 h-4" />,
-      badge: orders.length,
+      badge: orders.length + pendingBargainsCount,
+      isAlert: pendingBargainsCount > 0,
+    },
+    {
+      id: 'MEMBERSHIP',
+      label: 'Pro Membership ⭐',
+      shortLabel: 'Pro ⭐',
+      icon: <Crown className="w-4 h-4 text-amber-500" />,
+      isFeatured: true,
     },
     {
       id: 'SUPPORT_CONTACT',
-      label: 'Support & Contact',
+      label: 'Support',
       shortLabel: 'Support',
       icon: <Headphones className="w-4 h-4" />,
+    },
+    {
+      id: 'OWNER_ADMIN',
+      label: '👑 Owner Admin',
+      shortLabel: 'Admin',
+      icon: <Sparkles className="w-4 h-4 text-amber-400" />,
     },
   ];
 
@@ -222,16 +233,49 @@ export const Header: React.FC = () => {
                       <div className="text-[11px] text-slate-500 font-mono truncate">
                         {currentUser.email}
                       </div>
-                      <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-mono font-medium">
-                        <ShieldCheck className="w-2.5 h-2.5" />
-                        {currentUser.role === 'SELLER_LAB'
-                          ? 'Seller / Donor'
-                          : currentUser.role === 'TECH_PARTNER'
-                          ? 'Rework Tech'
-                          : 'Buyer / Student'}
-                      </span>
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        {currentUser.isProMember ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 text-[10px] font-bold">
+                            <Crown className="w-3 h-3 text-amber-500" />
+                            Pro Member ⭐
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowProfileMenu(false);
+                              setActiveTab('MEMBERSHIP');
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 text-[10px] font-bold"
+                          >
+                            <Sparkles className="w-2.5 h-2.5 text-amber-600" />
+                            Upgrade to Pro (₹99)
+                          </button>
+                        )}
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-mono font-medium">
+                          <ShieldCheck className="w-2.5 h-2.5" />
+                          {currentUser.role === 'OWNER_ADMIN'
+                            ? 'Owner Admin'
+                            : currentUser.role === 'SELLER_LAB'
+                            ? 'Seller / Lab'
+                            : 'Buyer / Student'}
+                        </span>
+                      </div>
                     </div>
                   </div>
+
+                  {/* Switch to Owner Admin */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowProfileMenu(false);
+                      switchOwnerAdmin();
+                    }}
+                    className="w-full py-1.5 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-sm"
+                  >
+                    <Crown className="w-3.5 h-3.5 text-amber-400" />
+                    <span>👑 Switch to Owner Admin</span>
+                  </button>
 
                   {/* District Switcher */}
                   <div className="space-y-2">
@@ -402,13 +446,24 @@ export const Header: React.FC = () => {
                 </div>
 
                 {isLoggedIn ? (
-                  <span className="font-mono text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
-                    {currentUser.role === 'SELLER_LAB'
-                      ? 'SELLER'
-                      : currentUser.role === 'TECH_PARTNER'
-                      ? 'TECH'
-                      : 'BUYER'}
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    {currentUser.isProMember ? (
+                      <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
+                        <Crown className="w-2.5 h-2.5 text-amber-500" /> PRO ⭐
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleMobileNavClick('MEMBERSHIP')}
+                        className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200"
+                      >
+                        Upgrade to Pro
+                      </button>
+                    )}
+                    <span className="font-mono text-[9px] font-semibold px-2 py-0.2 rounded-full bg-slate-200 text-slate-700">
+                      {currentUser.role === 'OWNER_ADMIN' ? 'OWNER' : currentUser.role}
+                    </span>
+                  </div>
                 ) : (
                   <button
                     onClick={() => handleMobileNavClick('LOGIN')}
@@ -418,6 +473,19 @@ export const Header: React.FC = () => {
                   </button>
                 )}
               </div>
+
+              {/* 1-Click Switch to Owner Admin */}
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  switchOwnerAdmin();
+                }}
+                className="w-full py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-95 shadow-sm"
+              >
+                <Crown className="w-3.5 h-3.5 text-amber-400" />
+                <span>👑 Switch to Owner Admin View</span>
+              </button>
 
               {/* District Selector inside Mobile Drawer */}
               <div className="pt-2 border-t border-slate-200/80 space-y-1">
