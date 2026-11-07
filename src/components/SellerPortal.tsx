@@ -46,6 +46,10 @@ export const SellerPortal: React.FC = () => {
   const [hardwareMode, setHardwareMode] =
     useState<HardwareMode>('READY_TO_USE');
   const [allowBargain, setAllowBargain] = useState<boolean>(true);
+  const [totalStockQty, setTotalStockQty] = useState<number>(() =>
+    CATALOG_CATEGORIES[0].id === 'BATTERIES_POWER_CELLS' ? 50 : 1
+  );
+  const [minOrderQty, setMinOrderQty] = useState<number>(1);
   const [sellingPrice, setSellingPrice] = useState<number>(
     CATALOG_CATEGORIES[0].recommendedPrice
   );
@@ -95,6 +99,11 @@ export const SellerPortal: React.FC = () => {
     setDesolderedPartPrice(
       Math.max(cat.minPrice, Math.round(cat.recommendedPrice * 0.55))
     );
+    if (cat.id === 'BATTERIES_POWER_CELLS') {
+      setTotalStockQty(50);
+    } else {
+      setTotalStockQty(1);
+    }
     if (!boardName || selectedCategory.quickFillChips.includes(boardName)) {
       setBoardName(cat.quickFillChips[0] || '');
     }
@@ -331,6 +340,8 @@ export const SellerPortal: React.FC = () => {
       allowBargain,
       isVerified: true,
       imageUrl: resolvedImageUrl,
+      totalStockQty: Math.max(1, totalStockQty),
+      minOrderQty: Math.max(1, minOrderQty),
       components: customComponents,
     });
 
@@ -1038,12 +1049,60 @@ export const SellerPortal: React.FC = () => {
                     <span className="font-bold text-amber-900 block">
                       🤝 Allow Pro Members to Bargain / Make Counter-Offers
                     </span>
-                    <span className="text-slate-600 text-[11px] block mt-0.5">
-                      Verified repair techs can propose a discount. You can
-                      accept or decline counter-offers anytime in 1 click.
+                    <span className="text-slate-600">
+                      Buyers can submit price offers for you to accept or decline.
                     </span>
                   </div>
                 </label>
+
+                {/* Bulk Quantity / Stock Management Input */}
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:p-5 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-700 block">
+                        📦 Total Available Quantity / Stock (Bulk Lots)
+                      </span>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Specify how many pieces are in stock for partial purchasing (e.g. 50 Li-Ion cells, 100 MCUs, or 1 complete board).
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xs text-slate-500">Calculated Lot Value:</span>
+                      <div className="text-base font-bold font-mono text-emerald-700">
+                        ₹{(sellingPrice * Math.max(1, totalStockQty)).toLocaleString('en-IN')}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Total Units Available:
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={10000}
+                        value={totalStockQty}
+                        onChange={(e) => setTotalStockQty(Math.max(1, Number(e.target.value)))}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Min. Order Quantity (MOQ):
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={Math.max(1, totalStockQty)}
+                        value={minOrderQty}
+                        onChange={(e) => setMinOrderQty(Math.max(1, Number(e.target.value)))}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                      />
+                    </div>
+                  </div>
+                </div>
 
                 {/* Seller Identity & WhatsApp Contact */}
                 <div className="space-y-3 pt-2">

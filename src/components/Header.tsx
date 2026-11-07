@@ -17,6 +17,7 @@ import {
   Layers,
   Crown,
   Sparkles,
+  ShoppingBag,
 } from 'lucide-react';
 import { useHarvestStore } from '../store/useHarvestStore';
 import { ActiveTab } from '../types/harvest';
@@ -35,6 +36,8 @@ export const Header: React.FC = () => {
     updateUserProfile,
     signOut,
     resetDemoState,
+    cartItems,
+    setIsCartDrawerOpen,
   } = useHarvestStore();
 
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -161,6 +164,22 @@ export const Header: React.FC = () => {
 
           {/* Right Controls: Consumer User Button + Tech Wallet + Reset */}
           <div className="flex items-center gap-2 shrink-0">
+            {/* Shopping Cart Drawer Trigger Button */}
+            <button
+              type="button"
+              onClick={() => setIsCartDrawerOpen(true)}
+              className="relative min-h-[40px] px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 border border-slate-200/90 flex items-center gap-1.5 text-xs font-semibold text-slate-800 shadow-2xs active:scale-95 transition-all"
+              title="View Shopping Cart"
+            >
+              <ShoppingBag className="w-4 h-4 text-emerald-600" />
+              <span className="hidden sm:inline">Cart</span>
+              {cartItems.length > 0 && (
+                <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                  {cartItems.reduce((acc, i) => acc + i.quantity, 0)}
+                </span>
+              )}
+            </button>
+
             {/* Tech Wallet Pill if active or balance exists */}
             {techWalletBalanceInr > 0 && (
               <div

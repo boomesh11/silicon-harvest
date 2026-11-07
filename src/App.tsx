@@ -14,6 +14,7 @@ import { AuthView } from './components/AuthView';
 import { MembershipPortal } from './components/MembershipPortal';
 import { OwnerAdminPortal } from './components/OwnerAdminPortal';
 import { FounderVaultModal } from './components/FounderVaultModal';
+import { CartDrawer } from './components/CartDrawer';
 import { Leaf, ShieldCheck, Layers, HelpCircle, Truck } from 'lucide-react';
 
 const MainShell: React.FC = () => {
@@ -54,6 +55,9 @@ const MainShell: React.FC = () => {
 
       {/* Corner Founder Vault Shield Icon (Boomesh@21 / rkboomesh@2006) */}
       <FounderVaultModal />
+
+      {/* Slide-over Shopping Cart Drawer */}
+      <CartDrawer />
 
       <footer className="relative border-t border-slate-200/80 bg-white/80 backdrop-blur-xl py-6 sm:py-8 pb-24 md:pb-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-500 text-center sm:text-left">

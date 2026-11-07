@@ -23,6 +23,8 @@ import {
   BargainOffer,
   HardwareMode,
   OrderStatus,
+  ComponentStatus,
+  CartItem,
 } from '../types/harvest';
 import {
   INITIAL_DONOR_BOARDS,
@@ -82,6 +84,7 @@ const STORAGE_KEYS = {
   TICKETS: 'sh_clean_prod_v5_tickets',
   BARGAINS: 'sh_clean_prod_v5_bargains',
   PRO_OVERRIDES: 'sh_clean_prod_v5_pro_overrides',
+  CART: 'sh_clean_prod_v5_cart',
 };
 
 const LEGACY_KEYS_TO_PURGE = [
@@ -165,6 +168,7 @@ export interface PlaceOrderPayload {
   bargainDiscountInr?: number;
   redeemedBargainId?: string;
   totalPriceInr?: number;
+  quantity?: number;
 }
 
 export interface PlaceBulkCartOrderPayload {
@@ -199,6 +203,8 @@ export interface NewBoardListingInput {
   allowBargain?: boolean;
   isVerified?: boolean;
   imageUrl?: string;
+  totalStockQty?: number;
+  minOrderQty?: number;
   components?: (BoardTemplateComponent & { isPrimaryFault?: boolean })[];
 }
 
@@ -208,6 +214,24 @@ interface HarvestStoreContextValue {
   orders: Order[];
   bargainOffers: BargainOffer[];
   supportTickets: SupportTicket[];
+  cartItems: CartItem[];
+  addToCart: (item: Omit<CartItem, 'id'>) => void;
+  updateCartItemQty: (itemId: string, delta: number) => void;
+  removeCartItem: (itemId: string) => void;
+  clearCart: () => void;
+  checkoutCart: (payload: {
+    buyerName: string;
+    buyerPhone: string;
+    buyerAddress: string;
+    buyerState?: string;
+    buyerDistrict?: string;
+    buyerPincode?: string;
+    deliveryType: DeliveryType;
+    logisticsPartner?: string;
+    upiUtrOrPaymentId?: string;
+  }) => Order[];
+  isCartDrawerOpen: boolean;
+  setIsCartDrawerOpen: (open: boolean) => void;
   techWalletBalanceInr: number;
   techCompletedJobsCount: number;
   activeTab: ActiveTab;
@@ -376,6 +400,10 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   const [proDirectoryOverrides, setProDirectoryOverrides] = useState<Record<string, boolean>>(() =>
     loadFromStorage(STORAGE_KEYS.PRO_OVERRIDES, {})
   );
+  const [cartItems, setCartItems] = useState<CartItem[]>(() =>
+    loadFromStorage<CartItem[]>(STORAGE_KEYS.CART, [])
+  );
+  const [isCartDrawerOpen, setIsCartDrawerOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserProfile>(() =>
     loadFromStorage(
       USER_SESSION_KEY,
@@ -453,6 +481,10 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     safeSaveToStorage(STORAGE_KEYS.PRO_OVERRIDES, proDirectoryOverrides);
   }, [proDirectoryOverrides]);
+
+  useEffect(() => {
+    safeSaveToStorage(STORAGE_KEYS.CART, cartItems);
+  }, [cartItems]);
 
   useEffect(() => {
     safeSaveToStorage(STORAGE_KEYS.USER, currentUser);
@@ -945,11 +977,22 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         )
       );
     } else if (payload.componentId) {
-      const updatedComps = components.map((c) =>
-        c.id === payload.componentId ? { ...c, status: 'EXTRACTED_SOLD' as const } : c
-      );
+      const updatedComps = components.map((c) => {
+        if (c.id !== payload.componentId) return c;
+        const purchaseQty = payload.quantity ?? 1;
+        const total = c.totalStockQty ?? 1;
+        const currentSold = c.soldQty ?? 0;
+        const newSold = currentSold + purchaseQty;
+        const isSoldOut = newSold >= total;
+        return {
+          ...c,
+          soldQty: newSold,
+          status: (isSoldOut ? 'EXTRACTED_SOLD' : 'INTACT') as ComponentStatus,
+        };
+      });
       setComponents(updatedComps);
 
+      const targetCompAfter = updatedComps.find((c) => c.id === payload.componentId);
       const remainingIntactForBoard = updatedComps.filter(
         (c) => c.donorBoardId === payload.donorBoardId && c.status === 'INTACT'
       ).length;
@@ -957,15 +1000,22 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       setBoards((prev) =>
         prev.map((b) => {
           if (b.id !== payload.donorBoardId) return b;
+          const purchaseQty = payload.quantity ?? 1;
+          const boardTotal = b.totalStockQty ?? 1;
+          const boardSold = (b.soldQty ?? 0) + purchaseQty;
+          const boardFullySold = boardSold >= boardTotal;
+
           const totalCount =
             b.totalComponentsCount ??
             updatedComps.filter((c) => c.donorBoardId === b.id).length;
           return {
             ...b,
-            status:
-              remainingIntactForBoard < totalCount || b.status === 'AVAILABLE'
-                ? 'PARTIALLY_HARVESTED'
-                : b.status,
+            soldQty: boardSold,
+            status: boardFullySold
+              ? 'SOLD_RAW'
+              : remainingIntactForBoard < totalCount || b.status === 'AVAILABLE'
+              ? 'PARTIALLY_HARVESTED'
+              : b.status,
             intactComponentsCount: remainingIntactForBoard,
           };
         })
@@ -1291,6 +1341,9 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       allowBargain: input.allowBargain ?? true,
       isVerified: input.isVerified ?? true,
       imageUrl: input.imageUrl,
+      totalStockQty: input.totalStockQty ?? 1,
+      soldQty: 0,
+      minOrderQty: input.minOrderQty ?? 1,
       status: 'AVAILABLE',
       totalComponentsCount: componentsList.length,
       intactComponentsCount: intactCount,
@@ -1311,6 +1364,9 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         partPriceInr: comp.partPriceInr,
         extractionFeeInr: comp.extractionFeeInr,
         bypassHackTip: comp.bypassHackTip,
+        totalStockQty: input.totalStockQty ?? 1,
+        soldQty: 0,
+        minOrderQty: input.minOrderQty ?? 1,
         status: comp.isPrimaryFault ? 'FAULTY_ON_ARRIVAL' : 'INTACT',
       })
     );
@@ -1729,6 +1785,89 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     return newTicket;
   };
 
+  const addToCart = (item: Omit<CartItem, 'id'>) => {
+    const itemId = `CART-${item.boardId}-${item.componentId || 'board'}-${item.mode}`;
+    setCartItems((prev) => {
+      const existing = prev.find((i) => i.id === itemId);
+      if (existing) {
+        const newQty = Math.min(item.maxStock, existing.quantity + item.quantity);
+        return prev.map((i) => (i.id === itemId ? { ...i, quantity: newQty } : i));
+      }
+      return [...prev, { ...item, id: itemId }];
+    });
+    setIsCartDrawerOpen(true);
+  };
+
+  const updateCartItemQty = (itemId: string, delta: number) => {
+    setCartItems((prev) =>
+      prev
+        .map((item) => {
+          if (item.id !== itemId) return item;
+          const next = item.quantity + delta;
+          if (next <= 0) return null;
+          return { ...item, quantity: Math.min(item.maxStock, next) };
+        })
+        .filter(Boolean) as CartItem[]
+    );
+  };
+
+  const removeCartItem = (itemId: string) => {
+    setCartItems((prev) => prev.filter((i) => i.id !== itemId));
+  };
+
+  const clearCart = () => {
+    setCartItems([]);
+  };
+
+  const checkoutCart = (payload: {
+    buyerName: string;
+    buyerPhone: string;
+    buyerAddress: string;
+    buyerState?: string;
+    buyerDistrict?: string;
+    buyerPincode?: string;
+    deliveryType: DeliveryType;
+    logisticsPartner?: string;
+    upiUtrOrPaymentId?: string;
+  }): Order[] => {
+    if (cartItems.length === 0) {
+      throw new Error('Shopping cart is empty.');
+    }
+
+    const createdOrders: Order[] = [];
+
+    // Process partial purchase reduction item by item
+    for (const item of cartItems) {
+      const targetBoard = boards.find((b) => b.id === item.boardId);
+      if (!targetBoard) continue;
+
+      const orderMode: OrderMode = item.mode === 'RAW_DONOR_BOARD' ? 'RAW_DONOR_BOARD' : 'EXTRACTED_TESTED_PART';
+
+      const singleOrder = placeOrder({
+        donorBoardId: item.boardId,
+        componentId: item.componentId || null,
+        mode: orderMode,
+        deliveryType: payload.deliveryType,
+        logisticsPartner: payload.logisticsPartner || 'Selected Partner',
+        buyerName: payload.buyerName,
+        buyerPhone: payload.buyerPhone,
+        buyerAddress: payload.buyerAddress,
+        buyerState: payload.buyerState,
+        buyerDistrict: payload.buyerDistrict,
+        buyerPincode: payload.buyerPincode,
+        upiUtrOrPaymentId: payload.upiUtrOrPaymentId,
+        quantity: item.quantity,
+        totalPriceInr: item.unitPriceInr * item.quantity + (item.extractionFeeInr ?? 0) * item.quantity,
+      });
+
+      createdOrders.push(singleOrder);
+    }
+
+    setCartItems([]);
+    setIsCartDrawerOpen(false);
+    return createdOrders;
+  };
+
   const resetDemoState = () => {
     try {
       Object.values(STORAGE_KEYS).forEach((key) => localStorage.removeItem(key));
@@ -1756,6 +1895,14 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         orders,
         bargainOffers,
         supportTickets,
+        cartItems,
+        addToCart,
+        updateCartItemQty,
+        removeCartItem,
+        clearCart,
+        checkoutCart,
+        isCartDrawerOpen,
+        setIsCartDrawerOpen,
         techWalletBalanceInr,
         techCompletedJobsCount,
         activeTab,

@@ -53,7 +53,11 @@ export const MarketplacePortal: React.FC = () => {
     currentUser,
     pendingCheckoutTarget,
     setPendingCheckoutTarget,
+    addToCart,
+    setIsCartDrawerOpen,
   } = useHarvestStore();
+
+  const [cardQuantities, setCardQuantities] = useState<Record<string, number>>({});
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<
@@ -729,6 +733,83 @@ export const MarketplacePortal: React.FC = () => {
 
                   {/* Dual-Action Pricing Buttons */}
                   <div className="mt-6 pt-5 border-t border-slate-200/80 space-y-2.5">
+                    {/* Bulk Quantity Stepper & Stock Telemetry */}
+                    {(() => {
+                      const totalAvailable = Math.max(1, (comp.totalStockQty ?? parentBoard.totalStockQty ?? 1) - (comp.soldQty ?? parentBoard.soldQty ?? 0));
+                      const selectedQty = Math.min(totalAvailable, Math.max(1, cardQuantities[comp.id] ?? 1));
+
+                      return (
+                        <div className="space-y-2 pb-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-semibold text-slate-700">
+                              Available Stock:
+                            </span>
+                            <span className="font-mono text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                              {totalAvailable} units left
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setCardQuantities((prev) => ({
+                                    ...prev,
+                                    [comp.id]: Math.max(1, selectedQty - 1),
+                                  }));
+                                }}
+                                className="w-7 h-7 rounded-lg bg-white hover:bg-slate-200 flex items-center justify-center text-slate-800 font-bold active:scale-95 shadow-2xs"
+                              >
+                                -
+                              </button>
+                              <span className="font-mono text-xs font-bold px-2 text-slate-900 min-w-[28px] text-center">
+                                {selectedQty}
+                              </span>
+                              <button
+                                type="button"
+                                disabled={selectedQty >= totalAvailable}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setCardQuantities((prev) => ({
+                                    ...prev,
+                                    [comp.id]: Math.min(totalAvailable, selectedQty + 1),
+                                  }));
+                                }}
+                                className="w-7 h-7 rounded-lg bg-white hover:bg-slate-200 flex items-center justify-center text-slate-800 font-bold active:scale-95 shadow-2xs disabled:opacity-40"
+                              >
+                                +
+                              </button>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                addToCart({
+                                  boardId: parentBoard.id,
+                                  componentId: comp.id,
+                                  title: `${comp.partNumber} — ${comp.partName}`,
+                                  unitPriceInr: comp.partPriceInr,
+                                  extractionFeeInr: effectiveExtractionFee,
+                                  quantity: selectedQty,
+                                  maxStock: totalAvailable,
+                                  sellerName: parentBoard.sellerName,
+                                  sellerDistrict: parentBoard.sellerDistrict || 'Chennai',
+                                  mode: isSolderedOnly ? 'RAW_DONOR_BOARD' : 'EXTRACTED_TESTED_PART',
+                                  imageUrl: parentBoard.imageUrl,
+                                });
+                              }}
+                              className="flex-1 py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-sm"
+                            >
+                              <ShoppingBag className="w-3.5 h-3.5" />
+                              <span>Add to Cart 🛒</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
                     {parentBoard.sellerId &&
                     parentBoard.sellerId === currentUser.id ? (
                       <button

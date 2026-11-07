@@ -84,6 +84,9 @@ export interface DonorBoard {
   imageUrl?: string;
   totalComponentsCount?: number;
   intactComponentsCount?: number;
+  totalStockQty?: number;
+  soldQty?: number;
+  minOrderQty?: number;
   createdAt?: string;
 }
 
@@ -101,6 +104,24 @@ export interface HarvestableComponent {
   extractionFeeInr: number;
   bypassHackTip?: string;
   status: ComponentStatus;
+  totalStockQty?: number;
+  soldQty?: number;
+  minOrderQty?: number;
+}
+
+export interface CartItem {
+  id: string;
+  boardId: string;
+  componentId?: string;
+  title: string;
+  unitPriceInr: number;
+  extractionFeeInr?: number;
+  quantity: number;
+  maxStock: number;
+  sellerName: string;
+  sellerDistrict: string;
+  mode: 'RAW_DONOR_BOARD' | 'EXTRACTED_TESTED_PART' | 'READY_TO_USE';
+  imageUrl?: string;
 }
 
 export interface Order {
@@ -122,6 +143,7 @@ export interface Order {
   donorBoardId: string;
   componentId: string | null;
   componentIds?: string[];
+  quantity?: number;
   mode: OrderMode;
   hardwareMode?: HardwareMode;
   deliveryType: DeliveryType;
