@@ -681,7 +681,9 @@ export async function supabaseSendPhoneOtp(
 export async function supabaseVerifyPhoneOtp(
   phone: string,
   token: string,
-  fullName = ''
+  fullName = '',
+  district = 'Chennai',
+  state = 'Tamil Nadu'
 ): Promise<{ profile: UserProfile | null; error: string | null }> {
   const digits = normalizeIndianPhone(phone);
   const code = token.replace(/\D/g, '');
@@ -704,7 +706,9 @@ export async function supabaseVerifyPhoneOtp(
       role: 'BUYER_STUDENT',
       organization: '',
       phone: `+91 ${digits}`,
-      defaultAddress: '',
+      defaultAddress: `${district}, ${state}`,
+      state,
+      district,
       authMethod: 'PHONE_ONSCREEN',
       isSupabaseAuthenticated: false,
     });
@@ -763,7 +767,11 @@ export async function supabaseSignInWithGoogle(): Promise<{ error: string | null
  */
 export async function quickGoogleProfileSignIn(
   email: string,
-  fullName: string
+  fullName: string,
+  phone = '',
+  district = 'Chennai',
+  state = 'Tamil Nadu',
+  pincode = '600001'
 ): Promise<{ profile: UserProfile | null; error: string | null }> {
   const cleanEmail = email.trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
@@ -772,13 +780,18 @@ export async function quickGoogleProfileSignIn(
   if (!fullName.trim()) {
     return { profile: null, error: 'Please enter your full name.' };
   }
+  const cleanDigits = phone.replace(/\D/g, '').slice(-10);
+  const formattedPhone = cleanDigits.length === 10 ? `+91 ${cleanDigits}` : '';
   const profile = await upsertProfileRecord({
     email: cleanEmail,
     fullName: fullName.trim(),
     role: 'BUYER_STUDENT',
     organization: '',
-    phone: '',
-    defaultAddress: '',
+    phone: formattedPhone,
+    defaultAddress: `${district}, ${state}`,
+    state,
+    district,
+    pincode,
     authMethod: 'GOOGLE_QUICK',
     isSupabaseAuthenticated: false,
   });

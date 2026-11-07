@@ -86,17 +86,17 @@ export const MarketplacePortal: React.FC = () => {
     currentUser.district || 'Chennai'
   );
   const [bulkBuyerName, setBulkBuyerName] = useState(
-    currentUser.fullName || 'Laptop Service Lab'
+    currentUser.fullName || ''
   );
   const [bulkBuyerPhone, setBulkBuyerPhone] = useState(
     currentUser.phone
       ? currentUser.phone.replace(/\D/g, '').slice(-10)
-      : '9840012345'
+      : ''
   );
   const [bulkBuyerAddress, setBulkBuyerAddress] = useState(
-    currentUser.defaultAddress || 'Shop #14, Ritchie Street, Chennai'
+    currentUser.defaultAddress || ''
   );
-  const [bulkUtr, setBulkUtr] = useState('429104829104');
+  const [bulkUtr, setBulkUtr] = useState('');
 
   const toggleCartItem = (compId: string) => {
     setBulkCartIds((prev) =>
@@ -486,33 +486,32 @@ export const MarketplacePortal: React.FC = () => {
       {/* VIEW 1: COMPONENT MARKETPLACE BENTO GRID (3D SPATIAL TILT CARDS) */}
       {viewMode === 'COMPONENT_VIEW' ? (
         filteredComponents.length === 0 ? (
-          <div className="bg-white/90 backdrop-blur-2xl border border-slate-200/80 rounded-3xl p-16 text-center space-y-5 shadow-sm">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center mx-auto">
-              <Cpu className="w-7 h-7 text-emerald-600" />
+          <Card3D className="bg-white/95 backdrop-blur-2xl border border-slate-200/80 rounded-3xl p-12 sm:p-16 text-center space-y-5 shadow-md">
+            <div className="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center mx-auto shadow-xs">
+              <Cpu className="w-8 h-8 text-emerald-600" />
             </div>
-            <h3 className="text-xl font-semibold tracking-tight text-[#0F172A] font-display">
+            <h3 className="text-xl sm:text-2xl font-bold tracking-tight text-[#0F172A] font-display">
               {boards.length === 0
-                ? 'No Donor Boards Listed Yet (0 Active Boards)'
+                ? 'Marketplace Inventory is Ready for Your First Listing'
                 : 'No Harvestable Components Match Your Filter'}
             </h3>
-            <p className="text-sm text-slate-500 max-w-md mx-auto leading-relaxed">
+            <p className="text-sm text-slate-500 max-w-lg mx-auto leading-relaxed">
               {boards.length === 0
-                ? 'The marketplace starts 100% clean with zero fake inventory. Use a 1-Click Auto-BoM Hardware Template or upload a PCB photo to list the first dead donor board.'
+                ? 'Our circular hardware network starts 100% clean with zero fake inventory. List your first electronic spare, battery pack, motor, or donor PCB in 30 seconds.'
                 : 'Try clearing your search query or toggling off the < 15 km hyperlocal filter to explore all listed donor boards.'}
             </p>
-            <div className="pt-1">
+            <div className="pt-2">
               <button
                 onClick={() => setActiveTab('SELLER_PORTAL')}
-                className="px-6 py-3.5 rounded-2xl bg-[#0F172A] hover:bg-slate-800 text-white font-semibold text-xs sm:text-sm inline-flex items-center gap-2 transition-all shadow-sm"
+                className="px-6 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm inline-flex items-center gap-2 transition-all shadow-md shadow-emerald-600/20 active:scale-95"
               >
                 <PlusCircle className="w-4 h-4" />
                 <span>
-                  No donor boards listed yet — List the first dead PCB in 30
-                  seconds →
+                  + List Your First Electronic Spare or Board (30s) →
                 </span>
               </button>
             </div>
-          </div>
+          </Card3D>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredComponents.map((comp) => {
@@ -828,33 +827,32 @@ export const MarketplacePortal: React.FC = () => {
           </div>
         )
       ) : filteredBoards.length === 0 ? (
-        <div className="bg-white/90 backdrop-blur-2xl border border-slate-200/80 rounded-3xl p-16 text-center space-y-5 shadow-sm">
-          <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center mx-auto">
-            <Layers className="w-7 h-7 text-emerald-600" />
+        <Card3D className="bg-white/95 backdrop-blur-2xl border border-slate-200/80 rounded-3xl p-12 sm:p-16 text-center space-y-5 shadow-md">
+          <div className="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center mx-auto shadow-xs">
+            <Layers className="w-8 h-8 text-emerald-600" />
           </div>
-          <h3 className="text-xl font-semibold tracking-tight text-[#0F172A] font-display">
+          <h3 className="text-xl sm:text-2xl font-bold tracking-tight text-[#0F172A] font-display">
             {boards.length === 0
-              ? 'No Donor Boards Listed Yet (0 Active Boards)'
+              ? 'Marketplace Inventory is Ready for Your First Listing'
               : 'No Donor Boards Match Your Filter'}
           </h3>
-          <p className="text-sm text-slate-500 max-w-md mx-auto leading-relaxed">
+          <p className="text-sm text-slate-500 max-w-lg mx-auto leading-relaxed">
             {boards.length === 0
-              ? 'Publish a fault-isolated dead PCB using the 1-Click Auto-BoM Templates or Gemini 2.5 Flash Vision Scanner.'
+              ? 'Our circular hardware network starts 100% clean with zero fake inventory. List your first electronic spare, battery pack, motor, or donor PCB in 30 seconds.'
               : 'Try clearing your search filter to view all available donor boards.'}
           </p>
-          <div className="pt-1">
+          <div className="pt-2">
             <button
               onClick={() => setActiveTab('SELLER_PORTAL')}
-              className="px-6 py-3.5 rounded-2xl bg-[#0F172A] hover:bg-slate-800 text-white font-semibold text-xs sm:text-sm inline-flex items-center gap-2 transition-all shadow-sm"
+              className="px-6 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm inline-flex items-center gap-2 transition-all shadow-md shadow-emerald-600/20 active:scale-95"
             >
               <PlusCircle className="w-4 h-4" />
               <span>
-                No donor boards listed yet — List the first dead PCB in 30
-                seconds →
+                + List Your First Electronic Spare or Board (30s) →
               </span>
             </button>
           </div>
-        </div>
+        </Card3D>
       ) : (
         /* VIEW 2: DONOR BOARD BENTO GRID (3D SPATIAL TILT CARDS) */
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">

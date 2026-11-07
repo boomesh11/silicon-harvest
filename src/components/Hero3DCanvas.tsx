@@ -328,3 +328,4 @@ export const Hero3DCanvas: React.FC<Hero3DCanvasProps> = ({
 };
 
 export default Hero3DCanvas;
+

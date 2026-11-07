@@ -192,13 +192,14 @@ export const Header: React.FC = () => {
                     : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
                 }`}
               >
-                <User
-                  className={`w-3.5 h-3.5 ${
-                    isLoggedIn ? 'text-emerald-600' : 'text-white'
-                  }`}
-                />
                 {isLoggedIn ? (
-                  <div className="flex items-center gap-1 max-w-[145px] truncate text-left">
+                  <div className="flex items-center gap-1.5 max-w-[165px] truncate text-left">
+                    <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                      {(currentUser.fullName || currentUser.email || 'U')
+                        .trim()
+                        .charAt(0)
+                        .toUpperCase()}
+                    </span>
                     <span className="truncate font-semibold">
                       {currentUser.fullName || currentUser.email.split('@')[0]}
                     </span>
@@ -210,7 +211,10 @@ export const Header: React.FC = () => {
                     <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
                   </div>
                 ) : (
-                  <span>Sign In / Join</span>
+                  <>
+                    <User className="w-3.5 h-3.5 text-white" />
+                    <span>Sign In / Join</span>
+                  </>
                 )}
               </button>
 

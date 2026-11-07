@@ -181,25 +181,20 @@ export default async function handler(req: any, res: any) {
         });
       }
 
-      let { data: boardsData, error: bErr } = await supabase
+      const { data: boardsData, error: bErr } = await supabase
         .from('donor_boards')
         .select('*')
         .order('created_at', { ascending: false });
 
-      // Cloud Bootstrapper: If Supabase donor_boards table is empty, auto-upsert initial catalog
-      if (!bErr && (!boardsData || boardsData.length === 0)) {
-        await supabase
-          .from('donor_boards')
-          .upsert(INITIAL_DONOR_BOARDS.map(mapBoardToRow), { onConflict: 'id' });
-        await supabase
-          .from('harvestable_components')
-          .upsert(INITIAL_COMPONENTS.map(mapComponentToRow), { onConflict: 'id' });
-
-        const reFetch = await supabase
-          .from('donor_boards')
-          .select('*')
-          .order('created_at', { ascending: false });
-        boardsData = reFetch.data || [];
+      if (bErr) {
+        return res.status(200).json({
+          source: 'SEED_FALLBACK',
+          donorBoards: [],
+          components: [],
+          orders: [],
+          bargains: [],
+          supportTickets: [],
+        });
       }
 
       const [compRes, ordRes, bargRes, supRes] = await Promise.all([
@@ -211,19 +206,10 @@ export default async function handler(req: any, res: any) {
 
       return res.status(200).json({
         source: 'SUPABASE_CLOUD',
-        donorBoards:
-          boardsData && boardsData.length > 0
-            ? boardsData.map(mapRowToBoard)
-            : INITIAL_DONOR_BOARDS,
-        components:
-          compRes.data && compRes.data.length > 0
-            ? compRes.data.map(mapRowToComponent)
-            : INITIAL_COMPONENTS,
-        orders:
-          ordRes.data && ordRes.data.length > 0
-            ? ordRes.data.map(mapRowToOrder)
-            : INITIAL_ORDERS,
-        bargains: bargRes.data && bargRes.data.length > 0 ? bargRes.data : INITIAL_BARGAINS,
+        donorBoards: boardsData ? boardsData.map(mapRowToBoard) : [],
+        components: compRes.data ? compRes.data.map(mapRowToComponent) : [],
+        orders: ordRes.data ? ordRes.data.map(mapRowToOrder) : [],
+        bargains: bargRes.data || [],
         supportTickets: supRes.data || [],
       });
     }
@@ -359,3 +345,4 @@ export default async function handler(req: any, res: any) {
     });
   }
 }
+

@@ -242,7 +242,7 @@ Certified by SiliconHarvest ESD & Chip-Level Salvage Network
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-mono text-xs font-semibold uppercase tracking-widest px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                RECYKAL-GRADE LOGISTICS &amp; BARGAIN ENGINE
+                SILICONHARVEST LOGISTICS &amp; BARGAIN ENGINE
               </span>
               <span className="font-mono text-xs text-slate-500">
                 • {orders.length} Orders • {bargainOffers.length} Bargain Offers

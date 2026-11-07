@@ -31,13 +31,13 @@ export const MembershipPortal: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-24 text-slate-900">
-      {/* Hero Impact Banner - Recykal Style */}
+      {/* Hero Impact Banner - SiliconHarvest Style */}
       <section className="relative overflow-hidden bg-[#0F172A] px-4 py-12 sm:px-6 sm:py-16 lg:px-8 text-white">
         <div className="absolute inset-0 bg-radial-gradient from-emerald-500/10 via-transparent to-transparent pointer-events-none" />
         <div className="mx-auto max-w-5xl">
           <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/30 bg-amber-400/10 px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-amber-300">
             <Crown className="h-4 w-4 text-amber-400" />
-            Recykal.Market Pro Network
+            👑 SILICONHARVEST PRO NETWORK
           </div>
           <h1 className="mt-4 text-3xl font-extrabold tracking-tight sm:text-4xl lg:text-5xl text-white">
             Unlock Direct WhatsApp Chat, Seller Phone Numbers & ₹0 Platform Fees.
@@ -285,9 +285,9 @@ export const MembershipPortal: React.FC = () => {
               </div>
               <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
                 <p className="font-semibold text-slate-900 text-sm">Arduino Uno R3 (ATmega328P)</p>
-                <p className="text-xs text-slate-500">Seller: Rajan Electronics Lab • Guindy</p>
+                <p className="text-xs text-slate-500">Seller: SiliconHarvest Verified Hub • Guindy</p>
                 <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                  <span className="text-xs text-slate-400">Phone: +91 9840X XXXXX</span>
+                  <span className="text-xs text-slate-400">Phone: +91 7200X XXXXX</span>
                   <span className="text-xs font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">
                     Upgrade to Chat
                   </span>
@@ -306,11 +306,11 @@ export const MembershipPortal: React.FC = () => {
               </div>
               <div className="rounded-xl border border-emerald-200 bg-white p-3 space-y-2">
                 <p className="font-semibold text-slate-900 text-sm">Arduino Uno R3 (ATmega328P)</p>
-                <p className="text-xs text-slate-500">Seller: Rajan Electronics Lab • Shop 14, Guindy</p>
+                <p className="text-xs text-slate-500">Seller: SiliconHarvest Verified Hub • Guindy</p>
                 <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                  <span className="text-xs font-mono font-bold text-slate-800">+91 98401 23456</span>
+                  <span className="text-xs font-mono font-bold text-slate-800">+91 72002 55069</span>
                   <a
-                    href="https://wa.me/919840123456?text=Hi%20Rajan%20Electronics,%20interested%20in%20Arduino%20Uno%20R3%20from%20SiliconHarvest"
+                    href="https://wa.me/917200255069?text=Hi%20SiliconHarvest,%20interested%20in%20Arduino%20Uno%20R3"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 px-2.5 py-1 rounded-lg"

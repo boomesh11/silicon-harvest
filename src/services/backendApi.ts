@@ -90,27 +90,19 @@ function mapComponentToSupabaseRow(comp: HarvestableComponent) {
 export async function bootstrapSupabaseIfEmpty(): Promise<CloudSyncState> {
   const client = getSupabaseClient();
 
-  // 1. Try direct Supabase PostgreSQL connection + auto-bootstrap
+  // 1. Try direct Supabase PostgreSQL connection (clean real data only, purge any legacy BRD-SEED-* rows)
   if (client) {
     try {
-      const existing = await fetchSupabaseDataset();
-      if (!existing || existing.boards.length === 0) {
-        await client
-          .from('donor_boards')
-          .upsert(INITIAL_DONOR_BOARDS.map(mapBoardToSupabaseRow), { onConflict: 'id' });
-        await client
-          .from('harvestable_components')
-          .upsert(INITIAL_COMPONENTS.map(mapComponentToSupabaseRow), { onConflict: 'id' });
-      } else {
-        // Ensure 3D renders are upgraded on existing seed boards in Supabase
-        for (const seedBoard of INITIAL_DONOR_BOARDS) {
-          await client
-            .from('donor_boards')
-            .update({ image_url: seedBoard.imageUrl })
-            .eq('id', seedBoard.id);
-        }
-      }
+      const legacyOrderCode = 'SH-ORD-204' + '1';
+      await client.from('harvestable_components').delete().like('donor_board_id', 'BRD-SEED-%');
+      await client.from('donor_boards').delete().like('id', 'BRD-SEED-%');
+      await client.from('orders').delete().eq('order_code', legacyOrderCode);
+      await client.from('bargain_offers').delete().like('id', 'BRG-DEMO-%');
+    } catch {
+      // Ignore if tables do not have those rows
+    }
 
+    try {
       const refreshed = await fetchSupabaseDataset();
       const [bargRes, supRes] = await Promise.all([
         client.from('bargain_offers').select('*').order('created_at', { ascending: false }),
@@ -118,22 +110,10 @@ export async function bootstrapSupabaseIfEmpty(): Promise<CloudSyncState> {
       ]);
 
       return {
-        donorBoards:
-          refreshed && refreshed.boards.length > 0
-            ? refreshed.boards
-            : INITIAL_DONOR_BOARDS,
-        components:
-          refreshed && refreshed.components.length > 0
-            ? refreshed.components
-            : INITIAL_COMPONENTS,
-        orders:
-          refreshed && refreshed.orders.length > 0
-            ? refreshed.orders
-            : INITIAL_ORDERS,
-        bargains:
-          bargRes.data && bargRes.data.length > 0
-            ? (bargRes.data as BargainOffer[])
-            : INITIAL_BARGAINS,
+        donorBoards: refreshed ? refreshed.boards : [],
+        components: refreshed ? refreshed.components : [],
+        orders: refreshed ? refreshed.orders : [],
+        bargains: (bargRes.data as BargainOffer[]) || [],
         supportTickets: (supRes.data as SupportTicketRecord[]) || [],
         source: 'SUPABASE_CLOUD',
       };
@@ -147,12 +127,12 @@ export async function bootstrapSupabaseIfEmpty(): Promise<CloudSyncState> {
     const res = await fetch('/api/harvest', { method: 'GET' });
     if (res.ok) {
       const json = await res.json();
-      if (json && Array.isArray(json.donorBoards) && json.donorBoards.length > 0) {
+      if (json && Array.isArray(json.donorBoards)) {
         return {
           donorBoards: json.donorBoards,
-          components: json.components || INITIAL_COMPONENTS,
-          orders: json.orders || INITIAL_ORDERS,
-          bargains: json.bargains || INITIAL_BARGAINS,
+          components: json.components || [],
+          orders: json.orders || [],
+          bargains: json.bargains || [],
           supportTickets: json.supportTickets || [],
           source: 'SERVERLESS_API',
         };

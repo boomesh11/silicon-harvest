@@ -73,19 +73,20 @@ import {
 } from '../services/backendApi';
 
 /** Persisted signed-in customer session (restored on reload). */
-const USER_SESSION_KEY = 'silicon_harvest_user_session';
+const USER_SESSION_KEY = 'sh_clean_prod_v5_user_session';
 
 const STORAGE_KEYS = {
-  BOARDS: 'silicon_harvest_prod_v3_boards',
-  COMPONENTS: 'silicon_harvest_prod_v3_components',
-  ORDERS: 'silicon_harvest_prod_v3_orders',
-  USER: 'silicon_harvest_prod_v3_user',
-  TICKETS: 'silicon_harvest_prod_v3_tickets',
-  BARGAINS: 'silicon_harvest_prod_v3_bargains',
-  PRO_OVERRIDES: 'silicon_harvest_prod_v3_pro_overrides',
+  BOARDS: 'sh_clean_prod_v5_boards',
+  COMPONENTS: 'sh_clean_prod_v5_components',
+  ORDERS: 'sh_clean_prod_v5_orders',
+  USER: 'sh_clean_prod_v5_user',
+  TICKETS: 'sh_clean_prod_v5_tickets',
+  BARGAINS: 'sh_clean_prod_v5_bargains',
+  PRO_OVERRIDES: 'sh_clean_prod_v5_pro_overrides',
 };
 
 const LEGACY_KEYS_TO_PURGE = [
+  'silicon_harvest_user_session',
   'silicon_harvest_boards_v3',
   'silicon_harvest_components_v3',
   'silicon_harvest_orders_v3',
@@ -97,7 +98,46 @@ const LEGACY_KEYS_TO_PURGE = [
   'silicon_harvest_prod_v1_orders',
   'silicon_harvest_prod_v1_user',
   'silicon_harvest_prod_v2_boards',
+  'silicon_harvest_prod_v2_components',
+  'silicon_harvest_prod_v2_orders',
+  'silicon_harvest_prod_v2_user',
+  'silicon_harvest_prod_v2_tickets',
+  'silicon_harvest_prod_v2_bargains',
+  'silicon_harvest_prod_v2_pro_overrides',
+  'silicon_harvest_prod_v3_boards',
+  'silicon_harvest_prod_v3_components',
+  'silicon_harvest_prod_v3_orders',
+  'silicon_harvest_prod_v3_user',
+  'silicon_harvest_prod_v3_tickets',
+  'silicon_harvest_prod_v3_bargains',
+  'silicon_harvest_prod_v3_pro_overrides',
 ];
+
+function purgeAllLegacyLocalStorage() {
+  try {
+    LEGACY_KEYS_TO_PURGE.forEach((k) => localStorage.removeItem(k));
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (
+        key &&
+        (key.startsWith('silicon_harvest_') ||
+          key.startsWith('sh_prod_') ||
+          (key.startsWith('sh_v') && !key.startsWith('sh_clean_prod_v5_')))
+      ) {
+        if (
+          key !== 'silicon_harvest_supabase_url' &&
+          key !== 'silicon_harvest_supabase_anon_key'
+        ) {
+          keysToRemove.push(key);
+        }
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
+  } catch {
+    // ignore storage errors
+  }
+}
 
 const BROADCAST_CHANNEL_NAME = 'silicon_harvest_prod_v2_realtime_bus';
 
@@ -186,10 +226,18 @@ interface HarvestStoreContextValue {
   verifyPhoneOtp: (
     phone: string,
     token: string,
-    fullName?: string
+    fullName?: string,
+    district?: string,
+    state?: string
   ) => Promise<{ error: string | null }>;
   signInWithGoogle: () => Promise<{ error: string | null }>;
-  quickGoogleSignIn: (email: string, fullName: string) => Promise<{ error: string | null }>;
+  quickGoogleSignIn: (
+    email: string,
+    fullName: string,
+    phone?: string,
+    district?: string,
+    state?: string
+  ) => Promise<{ error: string | null }>;
   isSignedIn: boolean;
   signOut: () => void;
   connectionMode: ConnectionMode;
@@ -266,13 +314,11 @@ function getNextNumericId(ids: string[], prefix: string, minStart: number): numb
 export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  // Purge legacy prototype keys on first load
+  // Purge legacy prototype keys synchronously before initializing state
+  purgeAllLegacyLocalStorage();
+
   useEffect(() => {
-    try {
-      LEGACY_KEYS_TO_PURGE.forEach((k) => localStorage.removeItem(k));
-    } catch {
-      // ignore storage errors
-    }
+    purgeAllLegacyLocalStorage();
   }, []);
 
   const [boards, setBoards] = useState<DonorBoard[]>(() =>
@@ -664,10 +710,23 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     return supabaseSendPhoneOtp(phone);
   };
 
-  const verifyPhoneOtp = async (phone: string, token: string, fullName = '') => {
-    const { profile, error } = await supabaseVerifyPhoneOtp(phone, token, fullName);
+  const verifyPhoneOtp = async (
+    phone: string,
+    token: string,
+    fullName = '',
+    district = 'Chennai',
+    state = 'Tamil Nadu'
+  ) => {
+    const { profile, error } = await supabaseVerifyPhoneOtp(
+      phone,
+      token,
+      fullName,
+      district,
+      state
+    );
     if (profile) {
       setCurrentUser(profile);
+      syncUserAccountBackend(profile).catch(() => undefined);
       setActiveTab('MARKETPLACE');
     }
     return { error };
@@ -677,10 +736,23 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     return supabaseSignInWithGoogle();
   };
 
-  const quickGoogleSignIn = async (email: string, fullName: string) => {
-    const { profile, error } = await quickGoogleProfileSignIn(email, fullName);
+  const quickGoogleSignIn = async (
+    email: string,
+    fullName: string,
+    phone = '',
+    district = 'Chennai',
+    state = 'Tamil Nadu'
+  ) => {
+    const { profile, error } = await quickGoogleProfileSignIn(
+      email,
+      fullName,
+      phone,
+      district,
+      state
+    );
     if (profile) {
       setCurrentUser(profile);
+      syncUserAccountBackend(profile).catch(() => undefined);
       setActiveTab('MARKETPLACE');
     }
     return { error };

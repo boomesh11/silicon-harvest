@@ -110,3 +110,4 @@ export const Card3D: React.FC<Card3DProps> = ({
 };
 
 export default Card3D;
+

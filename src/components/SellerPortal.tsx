@@ -46,12 +46,12 @@ export const SellerPortal: React.FC = () => {
 
   // Location & Seller State
   const [sellerName, setSellerName] = useState<string>(
-    currentUser.fullName || 'Rajan Electronics Lab'
+    currentUser.fullName || ''
   );
   const [sellerPhone, setSellerPhone] = useState<string>(
     currentUser.phone
       ? currentUser.phone.replace(/\D/g, '').slice(-10)
-      : '9840123456'
+      : ''
   );
   const [state, setState] = useState<string>(currentUser.state || 'Tamil Nadu');
   const [district, setDistrict] = useState<string>(
@@ -167,11 +167,21 @@ export const SellerPortal: React.FC = () => {
     const isSameDistrictAsUser =
       district.toLowerCase().trim() === buyerActiveDistrict;
 
+    const categoryFallbackImages: Record<string, string> = {
+      IC_MICROCONTROLLERS: '/assets/3d/cat-ic.png',
+      WASHING_MACHINE_APPLIANCE: '/assets/3d/cat-appliance.png',
+      BATTERIES_POWER_CELLS: '/assets/3d/cat-battery.png',
+      SMPS_POWER_INVERTERS: '/assets/3d/cat-smps.png',
+      LAPTOP_MOBILE_MOTHERBOARDS: '/assets/3d/cat-laptop.png',
+      MOTORS_ROBOTICS_CNC: '/assets/3d/cat-motor.png',
+      AUDIO_TV_CONSUMER: '/assets/3d/hero-pcb.png',
+    };
+
     const newBoard = publishDonorBoard({
       boardName: boardName.trim(),
       category: selectedCategory.id as BoardCategory,
       subModel: boardName.trim(),
-      sellerName: sellerName.trim() || 'Electronics Recycler',
+      sellerName: sellerName.trim() || currentUser.fullName || 'Verified Seller',
       sellerPhone: `+91 ${cleanDigits}`,
       sellerState: state,
       sellerDistrict: district,
@@ -192,10 +202,12 @@ export const SellerPortal: React.FC = () => {
       isVerified: true,
       imageUrl:
         imageUrl ||
-        'https://images.unsplash.com/photo-1553406830-ef2513450d76?auto=format&fit=crop&w=600&q=80',
+        categoryFallbackImages[selectedCategory.id] ||
+        '/assets/3d/hero-pcb.png',
     });
 
     setPublishedBoard(newBoard);
+    setActiveTab('MARKETPLACE');
   };
 
   return (
@@ -689,7 +701,7 @@ export const SellerPortal: React.FC = () => {
                         required
                         value={sellerName}
                         onChange={(e) => setSellerName(e.target.value)}
-                        placeholder="e.g. Rajan Electronics Lab"
+                        placeholder="Enter your name or workshop name"
                         className="w-full min-h-[42px] px-3 py-2 text-xs border border-slate-300 rounded-xl"
                       />
                     </div>

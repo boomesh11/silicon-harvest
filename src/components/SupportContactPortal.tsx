@@ -242,7 +242,7 @@ export const SupportContactPortal: React.FC = () => {
                   type="text"
                   value={orderCode}
                   onChange={(e) => setOrderCode(e.target.value)}
-                  placeholder="SH-ORD-2041"
+                  placeholder="Enter your order code"
                   className="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-mono text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 />
               </div>
