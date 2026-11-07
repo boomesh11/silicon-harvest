@@ -109,16 +109,16 @@ export const Header: React.FC = () => {
       {/* 1. DESKTOP NAVBAR (>768px: Full-Width Sticky Header, Zero Clip) */}
       {/* ============================================================== */}
       <header className="hidden md:block sticky top-0 left-0 right-0 w-full z-50 backdrop-blur-xl bg-white/95 border-b border-slate-200/80 shadow-sm transition-all">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2 lg:gap-4 whitespace-nowrap">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 w-full h-16 flex items-center justify-between gap-2 lg:gap-4 whitespace-nowrap">
           {/* Minimalist Brand Logo with Emerald Circuit Leaf */}
           <div
             onClick={() => setActiveTab('MARKETPLACE')}
             className="flex items-center gap-2.5 cursor-pointer group shrink-0 active:scale-95 transition-transform"
           >
-            <div className="w-9 h-9 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center group-hover:border-emerald-500 transition-all">
-              <Leaf className="w-4 h-4 text-emerald-600" />
+            <div className="w-9 h-9 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center group-hover:border-emerald-500 transition-all shrink-0">
+              <Leaf className="w-4 h-4 text-emerald-600 shrink-0" />
             </div>
-            <span className="text-base font-bold tracking-tight text-[#1D1D1F]">
+            <span className="text-base font-bold tracking-tight text-[#1D1D1F] shrink-0">
               SiliconHarvest
             </span>
           </div>

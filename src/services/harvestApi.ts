@@ -749,16 +749,27 @@ export async function supabaseVerifyPhoneOtp(
  * 'true' — otherwise Supabase hard-redirects to a raw JSON 400 error page.
  */
 export async function supabaseSignInWithGoogle(): Promise<{ error: string | null }> {
-  if (!GOOGLE_OAUTH_ENABLED) {
-    return { error: 'GOOGLE_OAUTH_DISABLED' };
+  try {
+    if (!GOOGLE_OAUTH_ENABLED) {
+      return { error: 'GOOGLE_OAUTH_DISABLED' };
+    }
+    const client = getSupabaseClient();
+    if (!client) return { error: 'Sign-in service is temporarily unavailable.' };
+    const { data, error } = await client.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+        skipBrowserRedirect: true,
+      },
+    });
+    if (error || !data?.url) {
+      return { error: error ? error.message : 'GOOGLE_OAUTH_DISABLED' };
+    }
+    window.location.assign(data.url);
+    return { error: null };
+  } catch (err: any) {
+    return { error: err?.message || 'GOOGLE_OAUTH_DISABLED' };
   }
-  const client = getSupabaseClient();
-  if (!client) return { error: 'Sign-in service is temporarily unavailable.' };
-  const { error } = await client.auth.signInWithOAuth({
-    provider: 'google',
-    options: { redirectTo: window.location.origin },
-  });
-  return { error: error ? error.message : null };
 }
 
 /**
