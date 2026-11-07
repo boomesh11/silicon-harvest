@@ -284,11 +284,11 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6 bg-slate-900/60 backdrop-blur-md overflow-hidden animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6 bg-slate-900/60 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200"
       style={{ perspective: '1200px' }}
     >
       <div
-        className="relative w-full max-w-4xl bg-white backdrop-blur-3xl border-t sm:border border-slate-200 rounded-t-3xl sm:rounded-3xl shadow-[0_24px_80px_rgba(15,23,42,0.22)] overflow-hidden max-h-[92vh] sm:max-h-[90vh] flex flex-col animate-in slide-in-from-bottom duration-300 sm:animate-in sm:zoom-in-95"
+        className="relative w-full max-w-4xl bg-white backdrop-blur-3xl border-t sm:border border-slate-200 rounded-t-3xl sm:rounded-3xl shadow-[0_24px_80px_rgba(15,23,42,0.22)] overflow-hidden max-h-[92vh] sm:max-h-[90vh] flex flex-col my-auto animate-in slide-in-from-bottom duration-300 sm:animate-in sm:zoom-in-95"
         style={{ transformStyle: 'preserve-3d' }}
       >
         {/* Mobile Drag Handle Bar */}
@@ -369,7 +369,7 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
         </div>
 
         {/* Modal Body */}
-        <div className="p-3.5 sm:p-6 overflow-y-auto overflow-x-hidden overscroll-contain space-y-5">
+        <div className="p-3.5 sm:p-6 pb-8 sm:pb-8 overflow-y-auto overflow-x-hidden overscroll-contain space-y-5">
           {placedOrder ? (
             /* Order Receipt */
             <div className="py-8 px-6 text-center space-y-6 bg-emerald-50/50 border border-emerald-200 rounded-3xl">
@@ -1172,7 +1172,7 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                   </div>
                 </div>
 
-                <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 pt-2 pb-2 sm:pb-0">
+                <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 pt-3 pb-6 sm:pb-3">
                   <button
                     type="button"
                     onClick={onClose}

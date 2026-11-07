@@ -135,7 +135,7 @@ export const OwnerAdminPortal: React.FC = () => {
   }, [boards, orders, bargainOffers, proDirectoryOverrides]);
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-24 text-slate-900">
+    <div className="w-full text-slate-900 pb-20 sm:pb-28">
       {/* Admin Top Header Banner */}
       <section className="bg-[#0F172A] border-b border-slate-800 px-4 py-8 sm:px-6 lg:px-8 text-white rounded-3xl mb-6">
         <div className="mx-auto max-w-7xl">

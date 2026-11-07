@@ -350,7 +350,7 @@ export const SellerPortal: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-24 text-slate-900 w-full max-w-full overflow-x-hidden">
+    <div className="w-full max-w-full text-slate-900 pb-20 sm:pb-28">
       {/* Hero Header */}
       <section className="bg-[#0F172A] px-4 py-6 sm:px-6 sm:py-8 lg:px-8 text-white border-b border-slate-800 rounded-2xl sm:rounded-3xl mb-5 w-full max-w-full overflow-hidden">
         <div className="mx-auto max-w-4xl text-center sm:text-left">

@@ -491,3 +491,4 @@ export const C2CChatModal: React.FC = () => {
     </div>
   );
 };
+
