@@ -361,9 +361,9 @@ export const MarketplacePortal: React.FC = () => {
   ]);
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-8 sm:space-y-12 w-full max-w-full overflow-x-hidden">
       {/* Interactive 3D Hardware Hero Stage & 4-Pillar Action Console */}
-      <section className="pt-2 pb-2 md:pt-4 space-y-6">
+      <section className="pt-1 pb-2 md:pt-3 space-y-5 w-full max-w-full overflow-x-hidden">
         <Hardware3DStage
           activeBoardsCount={boards.length}
           intactComponentsCount={

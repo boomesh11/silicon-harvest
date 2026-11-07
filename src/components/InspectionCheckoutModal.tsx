@@ -332,7 +332,7 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
         </div>
 
         {/* Modal Body */}
-        <div className="p-4 sm:p-8 overflow-y-auto space-y-6">
+        <div className="p-3.5 sm:p-6 overflow-y-auto overflow-x-hidden overscroll-contain space-y-5">
           {placedOrder ? (
             /* Order Receipt */
             <div className="py-8 px-6 text-center space-y-6 bg-emerald-50/50 border border-emerald-200 rounded-3xl">

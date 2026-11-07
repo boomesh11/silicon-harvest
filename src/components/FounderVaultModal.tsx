@@ -47,7 +47,7 @@ export const FounderVaultModal: React.FC = () => {
           perspective: '800px',
           transformStyle: 'preserve-3d',
         }}
-        className={`fixed bottom-5 left-5 z-[60] group flex items-center gap-2 px-3.5 py-2.5 rounded-2xl border shadow-[0_14px_34px_rgba(7,9,14,0.45)] transition-all duration-300 active:scale-95 ${
+        className={`fixed bottom-20 left-3 md:bottom-5 md:left-5 z-[60] group flex items-center gap-2 px-3 py-2 md:px-3.5 md:py-2.5 rounded-2xl border shadow-[0_14px_34px_rgba(7,9,14,0.45)] transition-all duration-300 active:scale-95 ${
           activeTab === 'OWNER_ADMIN'
             ? 'bg-gradient-to-br from-[#07090E] via-[#0F172A] to-emerald-950 border-[#00F5A0]/70 text-[#00F5A0]'
             : 'bg-gradient-to-br from-[#07090E] via-[#111827] to-[#1E293B] border-white/20 hover:border-[#00F5A0]/60 text-white'

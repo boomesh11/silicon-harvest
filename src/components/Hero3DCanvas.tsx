@@ -205,7 +205,7 @@ export const Hero3DCanvas: React.FC<Hero3DCanvasProps> = ({
         isDraggingRef.current = false;
       }}
       onPointerLeave={handlePointerLeave}
-      className="w-full rounded-2xl border border-white/15 bg-[#05070B]/95 p-3 sm:p-4 relative overflow-hidden select-none cursor-grab active:cursor-grabbing"
+      className="w-full max-w-full rounded-2xl border border-white/15 bg-[#05070B]/95 p-2.5 sm:p-4 relative overflow-hidden select-none cursor-grab active:cursor-grabbing"
       style={{ perspective: '1200px' }}
     >
       {/* Background Animated WebGL/Canvas Circuit Layer */}
@@ -215,21 +215,21 @@ export const Hero3DCanvas: React.FC<Hero3DCanvasProps> = ({
       />
 
       {/* Top Stage Telemetry Bar */}
-      <div className="relative z-10 flex items-center justify-between text-[10px] font-mono text-slate-400 px-1 pb-2">
-        <span className="flex items-center gap-1.5 text-[#00F5A0] font-bold">
-          <Cpu className="w-3.5 h-3.5" />
-          3D HARDWARE DIE &amp; PCB STAGE
+      <div className="relative z-10 flex items-center justify-between gap-1 text-[9px] sm:text-[10px] font-mono text-slate-400 px-1 pb-1.5">
+        <span className="flex items-center gap-1 text-[#00F5A0] font-bold truncate">
+          <Cpu className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">3D HARDWARE DIE &amp; PCB STAGE</span>
         </span>
-        <span className="flex items-center gap-1 text-slate-300 bg-white/[0.06] px-2 py-0.5 rounded-full border border-white/10">
-          <RotateCw className="w-3 h-3 text-[#00F5A0]" />
-          Interactive 3D Tilt
+        <span className="flex items-center gap-1 text-slate-300 bg-white/[0.06] px-2 py-0.5 rounded-full border border-white/10 shrink-0">
+          <RotateCw className="w-2.5 h-2.5 text-[#00F5A0]" />
+          <span>3D Tilt</span>
         </span>
       </div>
 
       {/* 3D Perspective Floating Hardware Render Stage */}
       <div
         className={`relative z-10 w-full ${
-          compact ? 'h-48 sm:h-52' : 'h-56 sm:h-64'
+          compact ? 'h-40 sm:h-48' : 'h-44 sm:h-60'
         } flex items-center justify-center my-1`}
         style={{
           transform: `rotateX(${tilt.rx}deg) rotateY(${tilt.ry}deg)`,

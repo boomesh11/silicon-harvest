@@ -13,7 +13,7 @@ export const Hardware3DStage: React.FC<Hardware3DStageProps> = ({
   onSelectPillar,
 }) => {
   return (
-    <div className="relative rounded-3xl overflow-hidden bg-[#07090E] text-white border border-white/15 shadow-2xl">
+    <div className="relative w-full max-w-full rounded-3xl overflow-hidden bg-[#07090E] text-white border border-white/15 shadow-2xl">
       {/* Subtle Anodized Radial Grid */}
       <div
         className="pointer-events-none absolute inset-0 opacity-20"
@@ -24,9 +24,9 @@ export const Hardware3DStage: React.FC<Hardware3DStageProps> = ({
         }}
       />
 
-      <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 items-center gap-6 p-6 sm:p-8 lg:p-10">
+      <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 items-center gap-5 sm:gap-6 p-4 sm:p-7 lg:p-10 w-full max-w-full overflow-hidden">
         {/* Left Column: Engineering Mission & 4-Pillar Action Console */}
-        <div className="lg:col-span-7 space-y-5 text-left">
+        <div className="lg:col-span-7 min-w-0 space-y-4 sm:space-y-5 text-left">
           <div className="inline-flex flex-wrap items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-white/[0.06] border border-white/15 text-[11px] font-mono uppercase tracking-widest text-[#00F5A0]">
             <span className="h-2 w-2 rounded-full bg-[#00F5A0] animate-ping" />
             <span>FR4-GRADE TRACEABLE SALVAGE NETWORK • ZERO E-WASTE</span>
@@ -120,7 +120,7 @@ export const Hardware3DStage: React.FC<Hardware3DStageProps> = ({
         </div>
 
         {/* Right Column: Interactive 3D Hardware Stage (Hero3DCanvas) */}
-        <div className="lg:col-span-5 flex flex-col items-center">
+        <div className="lg:col-span-5 min-w-0 w-full max-w-full overflow-hidden flex flex-col items-center">
           <Hero3DCanvas />
         </div>
       </div>

@@ -211,9 +211,9 @@ export const SellerPortal: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-24 text-slate-900">
+    <div className="min-h-screen bg-[#F8FAFC] pb-24 text-slate-900 w-full max-w-full overflow-x-hidden">
       {/* Hero Header */}
-      <section className="bg-[#0F172A] px-4 py-8 sm:px-6 lg:px-8 text-white border-b border-slate-800 rounded-3xl mb-6">
+      <section className="bg-[#0F172A] px-4 py-6 sm:px-6 sm:py-8 lg:px-8 text-white border-b border-slate-800 rounded-2xl sm:rounded-3xl mb-5 w-full max-w-full overflow-hidden">
         <div className="mx-auto max-w-4xl text-center sm:text-left">
           <div className="inline-flex items-center gap-2 rounded-full bg-emerald-500/20 px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-emerald-400 border border-emerald-500/30">
             <Sparkles className="h-3.5 w-3.5" />
