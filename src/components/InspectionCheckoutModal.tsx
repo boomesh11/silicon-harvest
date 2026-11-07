@@ -2,32 +2,29 @@ import React, { useState, useEffect } from 'react';
 import {
   X,
   Cpu,
-  Flame,
   AlertTriangle,
   CheckCircle2,
   MapPin,
   Zap,
   Truck,
-  Package,
-  ShieldCheck,
-  Lock,
   Sparkles,
   ArrowRight,
-  QrCode,
-  Smartphone,
-  CreditCard,
   AlertCircle,
-  HelpCircle,
 } from 'lucide-react';
 import {
   DonorBoard,
   HarvestableComponent,
   OrderMode,
-  DeliveryType,
   Order,
 } from '../types/harvest';
 import { useHarvestStore } from '../store/useHarvestStore';
 import { INDIAN_STATES_DISTRICTS } from '../data/catalogPricing';
+import {
+  LOGISTICS_PARTNERS,
+  LogisticsPartnerKey,
+  calculateOrderBreakdown,
+  findScopedAcceptedBargain,
+} from '../config/pricingEngine';
 
 interface InspectionCheckoutModalProps {
   board: DonorBoard;
@@ -58,12 +55,21 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
   );
 
   const isRawDisabled = board.status !== 'AVAILABLE';
+  const isExtractedDisabled =
+    board.hardwareMode === 'SOLDERED_RAW' || intactComponents.length === 0;
+  const isReadyToUseModule = board.hardwareMode === 'READY_TO_USE';
 
   const [mode, setMode] = useState<OrderMode>(() => {
+    if (board.hardwareMode === 'SOLDERED_RAW' && !isRawDisabled) {
+      return 'RAW_DONOR_BOARD';
+    }
     if (initialMode === 'RAW_DONOR_BOARD' && !isRawDisabled) {
       return 'RAW_DONOR_BOARD';
     }
-    return 'EXTRACTED_TESTED_PART';
+    if (!isExtractedDisabled) {
+      return 'EXTRACTED_TESTED_PART';
+    }
+    return 'RAW_DONOR_BOARD';
   });
 
   // Buyer Profile & Location
@@ -84,14 +90,14 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
     currentUser.pincode || '600001'
   );
 
-  const sellerDistrict = board.sellerDistrict || 'Chennai';
+  const sellerDistrict = board.sellerDistrict || board.locationCity || 'Chennai';
   const isSameDistrict =
     buyerDistrict.toLowerCase().trim() === sellerDistrict.toLowerCase().trim();
 
   // Selected Logistics Partner
-  const [logisticsPartner, setLogisticsPartner] = useState<
-    'RAPIDO' | 'DUNZO' | 'PORTER' | 'INDIA_POST' | 'DELHIVERY' | 'SELF_PICKUP'
-  >(() => (isSameDistrict ? 'RAPIDO' : 'INDIA_POST'));
+  const [logisticsPartner, setLogisticsPartner] = useState<LogisticsPartnerKey>(
+    () => (isSameDistrict ? 'RAPIDO' : 'INDIA_POST')
+  );
 
   // Update logistics selection when buyer district changes
   useEffect(() => {
@@ -108,81 +114,51 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
         setLogisticsPartner('INDIA_POST');
       }
     }
-  }, [isSameDistrict]);
+  }, [isSameDistrict, logisticsPartner]);
 
   const [upiUtrInput, setUpiUtrInput] = useState('');
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [placedOrder, setPlacedOrder] = useState<Order | null>(null);
 
   useEffect(() => {
-    if (mode === 'RAW_DONOR_BOARD' && isRawDisabled) {
+    if (mode === 'RAW_DONOR_BOARD' && isRawDisabled && !isExtractedDisabled) {
       setMode('EXTRACTED_TESTED_PART');
+    } else if (
+      mode === 'EXTRACTED_TESTED_PART' &&
+      isExtractedDisabled &&
+      !isRawDisabled
+    ) {
+      setMode('RAW_DONOR_BOARD');
     }
-  }, [isRawDisabled, mode]);
+  }, [isRawDisabled, isExtractedDisabled, mode]);
 
   const selectedComp =
     boardComponents.find((c) => c.id === selectedComponentId) ||
     intactComponents[0] ||
     null;
 
-  // Pro & Accepted Bargain Calculation
-  const isPro = currentUser.isProMember ?? false;
-  const acceptedBargain = bargainOffers.find(
-    (b) => b.boardId === board.id && b.status === 'ACCEPTED'
-  );
-  const bargainDiscountInr = acceptedBargain
-    ? Math.max(0, board.rawBoardPriceInr - acceptedBargain.offeredPriceInr)
-    : 0;
+  // Single Source of Truth Pricing & Scoped Bargain Calculation
+  const isPro = Boolean(currentUser.isProMember);
+  const partnerInfo = LOGISTICS_PARTNERS[logisticsPartner];
 
-  // Item Price
-  const itemPriceInr =
-    mode === 'RAW_DONOR_BOARD'
-      ? board.rawBoardPriceInr
-      : selectedComp
-      ? selectedComp.partPriceInr
-      : 0;
+  const breakdown = calculateOrderBreakdown({
+    board,
+    component: selectedComp,
+    mode,
+    logisticsPartner,
+    isSameDistrict,
+    isProMember: isPro,
+    buyerId: currentUser.id,
+    bargainOffers,
+  });
 
-  // Hot-Air QC Desoldering Fee
-  const extractionFeeInr =
-    mode === 'RAW_DONOR_BOARD'
-      ? 0
-      : selectedComp
-      ? selectedComp.extractionFeeInr
-      : 0;
-
-  // 5% Platform Commission for standard users, strictly ₹0 for Pro members
-  const platformCommissionInr = isPro
-    ? 0
-    : Math.min(15, Math.max(5, Math.round((itemPriceInr + extractionFeeInr) * 0.05)));
-
-  // Delivery Partner Fee
-  let deliveryFeeInr = 0;
-  let deliveryType: DeliveryType = 'CAMPUS_HUB_PICKUP';
-
-  if (logisticsPartner === 'RAPIDO') {
-    deliveryFeeInr = 35;
-    deliveryType = 'HYPERLOCAL_RAPIDO';
-  } else if (logisticsPartner === 'DUNZO') {
-    deliveryFeeInr = 45;
-    deliveryType = 'HYPERLOCAL_DUNZO';
-  } else if (logisticsPartner === 'PORTER') {
-    deliveryFeeInr = 55;
-    deliveryType = 'HYPERLOCAL_PORTER';
-  } else if (logisticsPartner === 'INDIA_POST') {
-    deliveryFeeInr = 45;
-    deliveryType = 'OUTSTATION_PARCEL';
-  } else if (logisticsPartner === 'DELHIVERY') {
-    deliveryFeeInr = 65;
-    deliveryType = 'OUTSTATION_DELHIVERY';
-  } else if (logisticsPartner === 'SELF_PICKUP') {
-    deliveryFeeInr = 0;
-    deliveryType = 'CAMPUS_HUB_PICKUP';
-  }
-
-  const totalPayableInr = Math.max(
-    0,
-    itemPriceInr - bargainDiscountInr + extractionFeeInr + platformCommissionInr + deliveryFeeInr
-  );
+  const itemPriceInr = breakdown.itemPriceInr;
+  const bargainDiscountInr = breakdown.bargainDiscountInr;
+  const extractionFeeInr = breakdown.extractionFeeInr;
+  const platformCommissionInr = breakdown.platformCommissionInr;
+  const deliveryFeeInr = breakdown.deliveryFeeInr;
+  const deliveryType = breakdown.deliveryType;
+  const totalPayableInr = breakdown.totalPayableInr;
 
   const activeBypassTips = boardComponents.filter((c) => c.bypassHackTip);
 
@@ -190,9 +166,13 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
 
   const upiDeepLink = `upi://pay?pa=${encodeURIComponent(
     merchantUpiVpa
-  )}&pn=${encodeURIComponent('SiliconHarvest')}&am=${totalPayableInr}&cu=INR&tn=${encodeURIComponent('Hardware Salvage Checkout')}`;
+  )}&pn=${encodeURIComponent('SiliconHarvest')}&am=${totalPayableInr}&cu=INR&tn=${encodeURIComponent(
+    'Hardware Salvage Checkout'
+  )}`;
 
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(upiDeepLink)}`;
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
+    upiDeepLink
+  )}`;
 
   const availableDistricts =
     INDIAN_STATES_DISTRICTS.find((s) => s.state === buyerState)?.districts || [];
@@ -258,23 +238,13 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
           : null,
       mode,
       deliveryType,
-      logisticsPartner:
-        logisticsPartner === 'RAPIDO'
-          ? 'Rapido Bike Parcel'
-          : logisticsPartner === 'DUNZO'
-          ? 'Dunzo Express'
-          : logisticsPartner === 'PORTER'
-          ? 'Porter 2-Wheeler'
-          : logisticsPartner === 'INDIA_POST'
-          ? 'India Post Speed Post'
-          : logisticsPartner === 'DELHIVERY'
-          ? 'Delhivery Surface Express'
-          : 'Direct Self-Pickup Hub',
+      logisticsPartner: partnerInfo.label,
       platformCommissionInr,
       deliveryFeeInr,
       upiUtrOrPaymentId: `UTR-${cleanedUtr}`,
       isProOrder: isPro,
       bargainDiscountInr,
+      redeemedBargainId: breakdown.matchedBargain?.id,
       totalPriceInr: totalPayableInr,
     });
 
@@ -289,13 +259,19 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6 bg-slate-900/50 backdrop-blur-md overflow-hidden animate-in fade-in duration-200">
-      <div className="relative w-full max-w-4xl bg-white backdrop-blur-3xl border-t sm:border border-slate-200 rounded-t-3xl sm:rounded-3xl shadow-[0_24px_80px_rgba(15,23,42,0.18)] overflow-hidden max-h-[92vh] sm:max-h-[90vh] flex flex-col animate-in slide-in-from-bottom duration-300 sm:animate-in sm:zoom-in-95">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6 bg-slate-900/60 backdrop-blur-md overflow-hidden animate-in fade-in duration-200"
+      style={{ perspective: '1200px' }}
+    >
+      <div
+        className="relative w-full max-w-4xl bg-white backdrop-blur-3xl border-t sm:border border-slate-200 rounded-t-3xl sm:rounded-3xl shadow-[0_24px_80px_rgba(15,23,42,0.22)] overflow-hidden max-h-[92vh] sm:max-h-[90vh] flex flex-col animate-in slide-in-from-bottom duration-300 sm:animate-in sm:zoom-in-95"
+        style={{ transformStyle: 'preserve-3d' }}
+      >
         {/* Mobile Drag Handle Bar */}
         <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto my-2 sm:hidden shrink-0" />
 
         {/* Top Header */}
-        <div className="px-4 sm:px-6 py-3.5 sm:py-5 bg-slate-50/80 border-b border-slate-200/80 flex items-center justify-between gap-3 shrink-0">
+        <div className="px-4 sm:px-6 py-3.5 sm:py-5 bg-slate-50/90 border-b border-slate-200/80 flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center overflow-hidden shrink-0">
               {board.imageUrl ? (
@@ -313,7 +289,7 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                 <span className="font-mono text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 font-semibold">
                   {board.id}
                 </span>
-                <h2 className="text-base sm:text-xl font-semibold tracking-tight text-[#1D1D1F] truncate">
+                <h2 className="text-base sm:text-xl font-semibold tracking-tight text-[#0F172A] truncate font-display">
                   {board.boardName}
                 </h2>
                 <span
@@ -331,7 +307,7 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 mt-0.5">
                 <span className="flex items-center gap-1 font-medium text-slate-700 truncate">
                   <MapPin className="w-3 h-3 text-emerald-600 shrink-0" />
-                  Hub: {board.sellerDistrict || 'Chennai'}, {board.sellerState || 'Tamil Nadu'}
+                  Hub: {sellerDistrict}, {board.sellerState || 'Tamil Nadu'}
                 </span>
                 <span className="hidden sm:inline">•</span>
                 <span className="hidden sm:inline truncate">Seller: {board.sellerName}</span>
@@ -342,7 +318,7 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
           <button
             onClick={onClose}
             aria-label="Close Checkout"
-            className="min-h-[44px] min-w-[44px] rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-[#1D1D1F] border border-slate-200 flex items-center justify-center shrink-0 active:scale-95 transition-all"
+            className="min-h-[44px] min-w-[44px] rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-[#0F172A] border border-slate-200 flex items-center justify-center shrink-0 active:scale-95 transition-all"
           >
             <X className="w-5 h-5" />
           </button>
@@ -362,17 +338,19 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                     Order Confirmed • {placedOrder.orderCode}
                   </span>
                   <span className="font-mono text-xs font-semibold px-3 py-1 rounded-full bg-sky-100 text-sky-800 border border-sky-300">
-                    Logistics: {placedOrder.logisticsPartner || 'RAPIDO'}
+                    Logistics: {placedOrder.logisticsPartner || 'Rapido Bike Parcel'}
                   </span>
                 </div>
-                <h3 className="text-xl sm:text-2xl font-semibold tracking-tight text-[#1D1D1F] pt-2">
+                <h3 className="text-xl sm:text-2xl font-semibold tracking-tight text-[#0F172A] pt-2 font-display">
                   {placedOrder.mode === 'EXTRACTED_TESTED_PART'
                     ? 'Queued at Workbench (Escrow Active)'
                     : 'Raw Assembly Reserved for Dispatch'}
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-600 max-w-lg mx-auto leading-relaxed">
                   {placedOrder.mode === 'EXTRACTED_TESTED_PART'
-                    ? `Your ₹${placedOrder.extractionFeeInr} QC fee is safely held in escrow and released only after the technician tests multimeter continuity & diode drop.`
+                    ? (placedOrder.extractionFeeInr ?? 0) > 0
+                      ? `Your ₹${placedOrder.extractionFeeInr ?? 0} QC fee is safely held in escrow and released only after the technician tests multimeter continuity & diode drop.`
+                      : 'Your ready-to-use tested module has been verified and locked for dispatch.'
                     : 'Your raw assembly has been atomically locked for self-salvage or hardware bypass.'}
                 </p>
               </div>
@@ -380,22 +358,46 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
               <div className="max-w-md mx-auto bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 text-left font-mono text-xs space-y-2 shadow-sm">
                 <div className="flex justify-between text-slate-500">
                   <span>Order Reference:</span>
-                  <span className="text-[#1D1D1F] font-semibold">{placedOrder.orderCode}</span>
+                  <span className="text-[#0F172A] font-semibold">{placedOrder.orderCode}</span>
                 </div>
                 <div className="flex justify-between text-slate-500">
                   <span>Buyer District:</span>
                   <span className="text-slate-800 font-semibold">{placedOrder.buyerDistrict}</span>
                 </div>
                 <div className="flex justify-between text-slate-500">
-                  <span>Platform Commission (10%):</span>
-                  <span className="text-emerald-700 font-semibold">₹{placedOrder.platformCommissionInr || 10}</span>
+                  <span>Item Base Price:</span>
+                  <span className="text-slate-900 font-semibold">₹{placedOrder.itemPriceInr}</span>
+                </div>
+                {(placedOrder.bargainDiscountInr ?? 0) > 0 && (
+                  <div className="flex justify-between text-amber-700">
+                    <span>Bargain Discount Applied:</span>
+                    <span className="font-semibold">-₹{placedOrder.bargainDiscountInr ?? 0}</span>
+                  </div>
+                )}
+                {placedOrder.mode === 'EXTRACTED_TESTED_PART' && (
+                  <div className="flex justify-between text-slate-500">
+                    <span>Extraction & Multimeter QC Fee:</span>
+                    <span className="text-amber-700 font-semibold">
+                      ₹{placedOrder.extractionFeeInr ?? 0}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between text-slate-500">
+                  <span>
+                    Platform Fee ({placedOrder.isProOrder ? 'Pro ⭐ ₹0 Free' : '5%'}):
+                  </span>
+                  <span className="text-emerald-700 font-semibold">
+                    ₹{placedOrder.platformCommissionInr ?? 0}
+                  </span>
                 </div>
                 <div className="flex justify-between text-slate-500">
                   <span>Delivery Partner:</span>
-                  <span className="text-[#1D1D1F] font-semibold">{placedOrder.logisticsPartner} (₹{placedOrder.deliveryFeeInr})</span>
+                  <span className="text-[#0F172A] font-semibold">
+                    {placedOrder.logisticsPartner} (₹{placedOrder.deliveryFeeInr ?? 0})
+                  </span>
                 </div>
                 <div className="border-t border-slate-200 pt-2 flex justify-between text-sm font-bold">
-                  <span className="text-[#1D1D1F]">Total Amount Paid:</span>
+                  <span className="text-[#0F172A]">Total Amount Paid:</span>
                   <span className="text-emerald-700">₹{placedOrder.totalPayableInr}</span>
                 </div>
               </div>
@@ -430,12 +432,29 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                       PCB Sub-Components & Health Map ({boardComponents.length} Mapped)
                     </h3>
                     <p className="text-xs text-slate-600 mt-0.5">
-                      Click any <span className="text-emerald-700 font-medium">🟢 Working</span> component below to target it for desoldering, or inspect the <span className="text-rose-700 font-medium">🔴 Fault</span>.
+                      {board.hardwareMode === 'SOLDERED_RAW' ? (
+                        <span>
+                          This listing is offered as a{' '}
+                          <strong className="text-slate-900">Soldered Raw Donor Assembly</strong>{' '}
+                          for self-salvage.
+                        </span>
+                      ) : (
+                        <span>
+                          Click any <span className="text-emerald-700 font-medium">🟢 Working</span>{' '}
+                          component below to target it, or inspect the{' '}
+                          <span className="text-rose-700 font-medium">🔴 Fault</span>.
+                        </span>
+                      )}
                     </p>
                   </div>
                   <div className="flex items-center gap-3 text-[11px] font-mono font-medium">
-                    <span className="text-emerald-700">🟢 Available ({intactComponents.length})</span>
-                    <span className="text-rose-700">🔴 Fault ({boardComponents.filter((c) => c.status === 'FAULTY_ON_ARRIVAL').length})</span>
+                    <span className="text-emerald-700">
+                      🟢 Available ({intactComponents.length})
+                    </span>
+                    <span className="text-rose-700">
+                      🔴 Fault (
+                      {boardComponents.filter((c) => c.status === 'FAULTY_ON_ARRIVAL').length})
+                    </span>
                   </div>
                 </div>
 
@@ -443,7 +462,8 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                 <div className="flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-800">
                   <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
                   <span>
-                    <strong>Reported Primary Fault:</strong> {board.primaryFault} — All other sub-components tested intact.
+                    <strong>Reported Primary Fault:</strong> {board.primaryFault} — All other
+                    sub-components tested intact.
                   </span>
                 </div>
 
@@ -460,7 +480,7 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                       <div
                         key={comp.id}
                         onClick={() => {
-                          if (isIntact) {
+                          if (isIntact && !isExtractedDisabled) {
                             setSelectedComponentId(comp.id);
                             setMode('EXTRACTED_TESTED_PART');
                           }
@@ -470,13 +490,15 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                             ? 'bg-rose-50/70 border-rose-200 opacity-90 cursor-not-allowed'
                             : !isIntact
                             ? 'bg-slate-100/70 border-slate-200 opacity-60 cursor-not-allowed'
+                            : isExtractedDisabled
+                            ? 'bg-white border-slate-200 opacity-90'
                             : isSelected
                             ? 'bg-emerald-50/90 border-emerald-500 ring-2 ring-emerald-500/20 cursor-pointer shadow-sm active:scale-98'
                             : 'bg-white border-slate-200 hover:border-emerald-400 cursor-pointer shadow-sm active:scale-98'
                         }`}
                       >
                         <div className="flex items-start justify-between gap-1.5">
-                          <span className="font-mono text-xs font-bold text-[#1D1D1F]">
+                          <span className="font-mono text-xs font-bold text-[#0F172A]">
                             {comp.partNumber}
                           </span>
                           <span
@@ -499,9 +521,12 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                           {isIntact ? (
                             <span className="text-emerald-700 font-bold">
                               ₹{comp.partPriceInr}
-                              <span className="text-amber-700 text-[10px] font-normal">
-                                {' '}(+₹{comp.extractionFeeInr} QC)
-                              </span>
+                              {!isReadyToUseModule && (
+                                <span className="text-amber-700 text-[10px] font-normal">
+                                  {' '}
+                                  (+₹{comp.extractionFeeInr} QC)
+                                </span>
+                              )}
                             </span>
                           ) : (
                             <span className="text-rose-600 font-semibold">DEAD</span>
@@ -566,7 +591,7 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                             onChange={() => setMode('RAW_DONOR_BOARD')}
                             className="accent-emerald-600 w-4 h-4"
                           />
-                          <span className="font-semibold text-xs text-[#1D1D1F]">
+                          <span className="font-semibold text-xs text-[#0F172A]">
                             Option A: Soldered (Full Raw Assembly)
                           </span>
                         </div>
@@ -582,10 +607,12 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                     {/* Option B: Desoldered Tested Part */}
                     <div
                       onClick={() => {
-                        if (selectedComp) setMode('EXTRACTED_TESTED_PART');
+                        if (!isExtractedDisabled && selectedComp) {
+                          setMode('EXTRACTED_TESTED_PART');
+                        }
                       }}
                       className={`min-h-[52px] p-4 rounded-2xl border transition-all active:scale-98 ${
-                        !selectedComp
+                        isExtractedDisabled || !selectedComp
                           ? 'bg-slate-100/70 border-slate-200 opacity-60 cursor-not-allowed'
                           : mode === 'EXTRACTED_TESTED_PART'
                           ? 'bg-emerald-50/70 border-emerald-500 ring-2 ring-emerald-500/20 cursor-pointer'
@@ -597,22 +624,34 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                           <input
                             type="radio"
                             checked={mode === 'EXTRACTED_TESTED_PART'}
-                            disabled={!selectedComp}
+                            disabled={isExtractedDisabled || !selectedComp}
                             onChange={() => setMode('EXTRACTED_TESTED_PART')}
                             className="accent-emerald-600 w-4 h-4"
                           />
-                          <span className="font-semibold text-xs text-[#1D1D1F]">
-                            Option B: Desoldered (Tested Component Only)
+                          <span className="font-semibold text-xs text-[#0F172A]">
+                            {isReadyToUseModule
+                              ? 'Option B: Ready-to-Use Tested Module'
+                              : 'Option B: Desoldered (Tested Component Only)'}
                           </span>
                         </div>
-                        {selectedComp && (
+                        {selectedComp && !isExtractedDisabled ? (
                           <span className="font-mono text-xs font-bold text-emerald-700">
-                            ₹{selectedComp.partPriceInr} + ₹{selectedComp.extractionFeeInr} QC
+                            {isReadyToUseModule
+                              ? `₹${selectedComp.partPriceInr} (₹0 QC)`
+                              : `₹${selectedComp.partPriceInr} + ₹${selectedComp.extractionFeeInr} QC`}
+                          </span>
+                        ) : (
+                          <span className="font-mono text-[10px] font-semibold text-slate-500">
+                            Raw Board Only
                           </span>
                         )}
                       </div>
                       <p className="text-xs text-slate-600 mt-2 pl-6">
-                        Receive ONLY the target working component, desoldered and verified with multimeter test.
+                        {board.hardwareMode === 'SOLDERED_RAW'
+                          ? 'Seller listed this board strictly as an un-desoldered raw assembly.'
+                          : isReadyToUseModule
+                          ? 'Pre-extracted ready-to-use module with ₹0 extra extraction fee.'
+                          : 'Receive ONLY the target working component, desoldered and verified with multimeter test.'}
                       </p>
                     </div>
                   </div>
@@ -634,7 +673,7 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                         value={buyerName}
                         onChange={(e) => setBuyerName(e.target.value)}
                         placeholder="Karthik Raj"
-                        className="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                        className="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                       />
                     </div>
                     <div>
@@ -648,7 +687,7 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                         value={buyerPhone}
                         onChange={(e) => setBuyerPhone(e.target.value.replace(/\D/g, ''))}
                         placeholder="9840012345"
-                        className="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-mono text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                        className="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-mono text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                       />
                     </div>
                     <div>
@@ -662,7 +701,7 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                         value={buyerPincode}
                         onChange={(e) => setBuyerPincode(e.target.value.replace(/\D/g, ''))}
                         placeholder="600025"
-                        className="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-mono text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                        className="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-mono text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                       />
                     </div>
                   </div>
@@ -675,7 +714,7 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                       <select
                         value={buyerState}
                         onChange={(e) => handleStateChange(e.target.value)}
-                        className="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs text-[#1D1D1F] focus:outline-none"
+                        className="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs text-[#0F172A] focus:outline-none"
                       >
                         {INDIAN_STATES_DISTRICTS.map((s) => (
                           <option key={s.state} value={s.state}>
@@ -691,7 +730,7 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                       <select
                         value={buyerDistrict}
                         onChange={(e) => setBuyerDistrict(e.target.value)}
-                        className="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs text-[#1D1D1F] font-semibold focus:outline-none"
+                        className="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs text-[#0F172A] font-semibold focus:outline-none"
                       >
                         {availableDistricts.map((d) => (
                           <option key={d} value={d}>
@@ -712,7 +751,7 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                       value={buyerAddress}
                       onChange={(e) => setBuyerAddress(e.target.value)}
                       placeholder="Room 102, Kaveri Hostel, IIT Madras Campus"
-                      className="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs text-[#1D1D1F] focus:outline-none"
+                      className="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs text-[#0F172A] focus:outline-none"
                     />
                   </div>
                 </div>
@@ -730,7 +769,7 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                   </div>
 
                   {isSameDistrict ? (
-                    /* Same District: Bike Parcel Partners */
+                    /* Same District: Bike Parcel Partners (Single Source of Truth Rates) */
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
                       <div
                         onClick={() => setLogisticsPartner('RAPIDO')}
@@ -741,9 +780,15 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                         }`}
                       >
                         <div className="text-base">🛵</div>
-                        <span className="font-bold text-xs text-[#1D1D1F] block mt-1">Rapido Bike</span>
-                        <span className="text-[11px] text-slate-500 block">35–45 mins</span>
-                        <span className="text-xs font-mono font-bold text-emerald-700 block mt-1">₹39</span>
+                        <span className="font-bold text-xs text-[#0F172A] block mt-1">
+                          Rapido Bike
+                        </span>
+                        <span className="text-[11px] text-slate-500 block">
+                          {LOGISTICS_PARTNERS.RAPIDO.eta}
+                        </span>
+                        <span className="text-xs font-mono font-bold text-emerald-700 block mt-1">
+                          ₹{LOGISTICS_PARTNERS.RAPIDO.feeInr}
+                        </span>
                       </div>
 
                       <div
@@ -755,9 +800,15 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                         }`}
                       >
                         <div className="text-base">📦</div>
-                        <span className="font-bold text-xs text-[#1D1D1F] block mt-1">Dunzo Express</span>
-                        <span className="text-[11px] text-slate-500 block">45 mins</span>
-                        <span className="text-xs font-mono font-bold text-emerald-700 block mt-1">₹45</span>
+                        <span className="font-bold text-xs text-[#0F172A] block mt-1">
+                          Dunzo Express
+                        </span>
+                        <span className="text-[11px] text-slate-500 block">
+                          {LOGISTICS_PARTNERS.DUNZO.eta}
+                        </span>
+                        <span className="text-xs font-mono font-bold text-emerald-700 block mt-1">
+                          ₹{LOGISTICS_PARTNERS.DUNZO.feeInr}
+                        </span>
                       </div>
 
                       <div
@@ -769,9 +820,15 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                         }`}
                       >
                         <div className="text-base">🚚</div>
-                        <span className="font-bold text-xs text-[#1D1D1F] block mt-1">Porter Safe</span>
-                        <span className="text-[11px] text-slate-500 block">60 mins</span>
-                        <span className="text-xs font-mono font-bold text-emerald-700 block mt-1">₹55</span>
+                        <span className="font-bold text-xs text-[#0F172A] block mt-1">
+                          Porter Safe
+                        </span>
+                        <span className="text-[11px] text-slate-500 block">
+                          {LOGISTICS_PARTNERS.PORTER.eta}
+                        </span>
+                        <span className="text-xs font-mono font-bold text-emerald-700 block mt-1">
+                          ₹{LOGISTICS_PARTNERS.PORTER.feeInr}
+                        </span>
                       </div>
 
                       <div
@@ -783,9 +840,15 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                         }`}
                       >
                         <div className="text-base">🏛️</div>
-                        <span className="font-bold text-xs text-[#1D1D1F] block mt-1">Self-Pickup</span>
-                        <span className="text-[11px] text-slate-500 block truncate">{sellerDistrict} Hub</span>
-                        <span className="text-xs font-mono font-bold text-emerald-700 block mt-1">₹0</span>
+                        <span className="font-bold text-xs text-[#0F172A] block mt-1">
+                          Self-Pickup
+                        </span>
+                        <span className="text-[11px] text-slate-500 block truncate">
+                          {sellerDistrict} Hub
+                        </span>
+                        <span className="text-xs font-mono font-bold text-emerald-700 block mt-1">
+                          ₹{LOGISTICS_PARTNERS.SELF_PICKUP.feeInr}
+                        </span>
                       </div>
                     </div>
                   ) : (
@@ -801,14 +864,17 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                       >
                         <div className="flex justify-between items-start">
                           <div>
-                            <span className="font-bold text-xs text-[#1D1D1F] block">
+                            <span className="font-bold text-xs text-[#0F172A] block">
                               📮 India Post Speed Post (Pocket ESD Pouch)
                             </span>
                             <span className="text-[11px] text-slate-500 block mt-0.5">
-                              Flat rate across Tamil Nadu & All India • 2–4 Business Days
+                              Flat rate across Tamil Nadu & All India •{' '}
+                              {LOGISTICS_PARTNERS.INDIA_POST.eta}
                             </span>
                           </div>
-                          <span className="text-sm font-mono font-bold text-emerald-700">₹49</span>
+                          <span className="text-sm font-mono font-bold text-emerald-700">
+                            ₹{LOGISTICS_PARTNERS.INDIA_POST.feeInr}
+                          </span>
                         </div>
                       </div>
 
@@ -822,14 +888,17 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                       >
                         <div className="flex justify-between items-start">
                           <div>
-                            <span className="font-bold text-xs text-[#1D1D1F] block">
+                            <span className="font-bold text-xs text-[#0F172A] block">
                               🚛 Delhivery / Shiprocket Surface Express
                             </span>
                             <span className="text-[11px] text-slate-500 block mt-0.5">
-                              Fast Inter-District Courier with Live AWB Tracking • 2–3 Days
+                              Fast Inter-District Courier with Live AWB Tracking •{' '}
+                              {LOGISTICS_PARTNERS.DELHIVERY.eta}
                             </span>
                           </div>
-                          <span className="text-sm font-mono font-bold text-emerald-700">₹69</span>
+                          <span className="text-sm font-mono font-bold text-emerald-700">
+                            ₹{LOGISTICS_PARTNERS.DELHIVERY.feeInr}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -842,28 +911,42 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                     <span className="text-xs font-mono font-bold text-slate-700 uppercase">
                       Itemized Breakdown
                     </span>
-                    <span className="text-xs text-slate-500">Fixed Platform Pricing</span>
+                    <span className="text-xs text-slate-500">
+                      Single-Source Escrow Pricing
+                    </span>
                   </div>
 
                   <div className="space-y-1.5 text-xs">
                     <div className="flex justify-between text-slate-600">
                       <span>
-                        {mode === 'RAW_DONOR_BOARD' ? 'Soldered Board Price' : `Extracted Component (${selectedComp?.partNumber})`}
+                        {mode === 'RAW_DONOR_BOARD'
+                          ? 'Soldered Board Price'
+                          : `Extracted Component (${selectedComp?.partNumber})`}
                       </span>
-                      <span className="font-mono font-semibold text-slate-900">₹{itemPriceInr}</span>
+                      <span className="font-mono font-semibold text-slate-900">
+                        ₹{itemPriceInr}
+                      </span>
                     </div>
 
                     {bargainDiscountInr > 0 && (
                       <div className="flex justify-between text-amber-700 font-semibold bg-amber-50 p-1.5 rounded-lg border border-amber-200">
-                        <span>🤝 Accepted Bargain Counter-Discount</span>
+                        <span>
+                          🤝 Accepted Scoped Bargain Discount (Single-Use)
+                        </span>
                         <span className="font-mono">-₹{bargainDiscountInr}</span>
                       </div>
                     )}
 
                     {mode === 'EXTRACTED_TESTED_PART' && (
                       <div className="flex justify-between text-slate-600">
-                        <span>Hot-Air Desoldering & Multimeter QC Fee</span>
-                        <span className="font-mono font-semibold text-amber-700">₹{extractionFeeInr}</span>
+                        <span>
+                          {isReadyToUseModule
+                            ? 'Ready-to-Use Module QC Fee'
+                            : 'Hot-Air Desoldering & Multimeter QC Fee'}
+                        </span>
+                        <span className="font-mono font-semibold text-amber-700">
+                          ₹{extractionFeeInr}
+                        </span>
                       </div>
                     )}
 
@@ -877,18 +960,24 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                         )}
                       </span>
                       <span className="font-mono font-semibold text-emerald-700">
-                        {isPro ? '₹0' : `₹${platformCommissionInr}`}
+                        ₹{platformCommissionInr}
                       </span>
                     </div>
 
                     <div className="flex justify-between text-slate-600">
-                      <span>Delivery Fee ({logisticsPartner})</span>
-                      <span className="font-mono font-semibold text-slate-900">₹{deliveryFeeInr}</span>
+                      <span>Delivery Fee ({partnerInfo.label})</span>
+                      <span className="font-mono font-semibold text-slate-900">
+                        ₹{deliveryFeeInr}
+                      </span>
                     </div>
 
                     <div className="border-t border-slate-200 pt-2 flex justify-between text-sm font-bold">
-                      <span className="text-[#1D1D1F]">Total Payable (Inc. GST & Commission):</span>
-                      <span className="text-emerald-700 font-mono text-base font-extrabold">₹{totalPayableInr}</span>
+                      <span className="text-[#0F172A]">
+                        Total Payable (Inc. GST & Commission):
+                      </span>
+                      <span className="text-emerald-700 font-mono text-base font-extrabold">
+                        ₹{totalPayableInr}
+                      </span>
                     </div>
                   </div>
 
@@ -921,7 +1010,7 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                           </a>
                           <a
                             href={upiDeepLink}
-                            className="min-h-[38px] px-2 py-1.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-[11px] flex items-center justify-center text-center active:scale-95 transition-all shadow-xs"
+                            className="min-h-[38px] px-2 py-1.5 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-[11px] flex items-center justify-center text-center active:scale-95 transition-all shadow-xs"
                           >
                             PhonePe
                           </a>
@@ -946,7 +1035,9 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
 
                         <div className="space-y-1">
                           <div className="flex justify-between items-center">
-                            <label className="text-[11px] font-medium text-slate-700">12-Digit UPI UTR Reference *</label>
+                            <label className="text-[11px] font-medium text-slate-700">
+                              12-Digit UPI UTR Reference *
+                            </label>
                             <button
                               type="button"
                               onClick={() => setUpiUtrInput('428192849182')}
@@ -962,7 +1053,7 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                             value={upiUtrInput}
                             onChange={(e) => setUpiUtrInput(e.target.value.replace(/\D/g, ''))}
                             placeholder="e.g. 428192849182"
-                            className="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-mono text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                            className="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-mono text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                           />
                         </div>
                       </div>

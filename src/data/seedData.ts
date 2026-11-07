@@ -350,6 +350,9 @@ export const INITIAL_BARGAINS: BargainOffer[] = [
   {
     id: 'BRG-DEMO-001',
     boardId: 'BRD-SEED-001',
+    componentId: null,
+    targetType: 'BOARD',
+    targetId: 'BRD-SEED-001',
     boardName: 'Arduino Uno R3 (ATmega328P DIP)',
     buyerId: 'USR-GUEST',
     buyerName: 'Priya Sundaram',
@@ -367,6 +370,9 @@ export const INITIAL_BARGAINS: BargainOffer[] = [
   {
     id: 'BRG-DEMO-002',
     boardId: 'BRD-SEED-002',
+    componentId: null,
+    targetType: 'BOARD',
+    targetId: 'BRD-SEED-002',
     boardName: 'Samsung Front-Load Inverter Driver Board',
     buyerId: 'USR-REPAIR-TECH',
     buyerName: 'Selvam Appliance Repairs',

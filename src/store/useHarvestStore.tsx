@@ -31,6 +31,11 @@ import {
   INITIAL_BARGAINS,
 } from '../data/seedData';
 import {
+  calculateOrderBreakdown,
+  findScopedAcceptedBargain,
+  resolveDeliveryFeeFromType,
+} from '../config/pricingEngine';
+import {
   getSupabaseClient,
   saveRuntimeSupabaseConfig,
   clearRuntimeSupabaseConfig,
@@ -65,6 +70,7 @@ const STORAGE_KEYS = {
   USER: 'silicon_harvest_prod_v2_user',
   TICKETS: 'silicon_harvest_prod_v2_tickets',
   BARGAINS: 'silicon_harvest_prod_v2_bargains',
+  PRO_OVERRIDES: 'silicon_harvest_prod_v2_pro_overrides',
 };
 
 const LEGACY_KEYS_TO_PURGE = [
@@ -81,6 +87,12 @@ const LEGACY_KEYS_TO_PURGE = [
 ];
 
 const BROADCAST_CHANNEL_NAME = 'silicon_harvest_prod_v2_realtime_bus';
+
+export interface PendingCheckoutTarget {
+  boardId: string;
+  componentId?: string | null;
+  mode: OrderMode;
+}
 
 export interface PlaceOrderPayload {
   buyerName: string;
@@ -99,6 +111,7 @@ export interface PlaceOrderPayload {
   upiUtrOrPaymentId?: string;
   isProOrder?: boolean;
   bargainDiscountInr?: number;
+  redeemedBargainId?: string;
   totalPriceInr?: number;
 }
 
@@ -134,7 +147,10 @@ interface HarvestStoreContextValue {
   techCompletedJobsCount: number;
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
+  pendingCheckoutTarget: PendingCheckoutTarget | null;
+  setPendingCheckoutTarget: (target: PendingCheckoutTarget | null) => void;
   currentUser: UserProfile;
+  proDirectoryOverrides: Record<string, boolean>;
   switchDemoRole: (role: UserRole) => void;
   updateUserProfile: (updates: Partial<UserProfile>) => void;
   signInWithEmail: (
@@ -208,11 +224,30 @@ const HarvestStoreContext = createContext<HarvestStoreContextValue | undefined>(
 function loadFromStorage<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key);
-    if (!raw) return fallback;
+    if (raw === null) return fallback;
     return JSON.parse(raw) as T;
   } catch {
     return fallback;
   }
+}
+
+function getNextNumericId(ids: string[], prefix: string, minStart: number): number {
+  let maxNum = minStart;
+  for (const id of ids) {
+    const matches = id.match(/(\d+)$/);
+    if (matches) {
+      const parsed = parseInt(matches[1], 10);
+      if (!Number.isNaN(parsed) && parsed > maxNum) {
+        maxNum = parsed;
+      }
+    } else if (id.startsWith(prefix)) {
+      const rest = parseInt(id.replace(prefix, ''), 10);
+      if (!Number.isNaN(rest) && rest > maxNum) {
+        maxNum = rest;
+      }
+    }
+  }
+  return maxNum + 1;
 }
 
 export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
@@ -227,24 +262,23 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, []);
 
-  const [boards, setBoards] = useState<DonorBoard[]>(() => {
-    const loaded = loadFromStorage<DonorBoard[]>(STORAGE_KEYS.BOARDS, []);
-    return loaded && loaded.length > 0 ? loaded : INITIAL_DONOR_BOARDS;
-  });
-  const [components, setComponents] = useState<HarvestableComponent[]>(() => {
-    const loaded = loadFromStorage<HarvestableComponent[]>(STORAGE_KEYS.COMPONENTS, []);
-    return loaded && loaded.length > 0 ? loaded : INITIAL_COMPONENTS;
-  });
-  const [orders, setOrders] = useState<Order[]>(() => {
-    const loaded = loadFromStorage<Order[]>(STORAGE_KEYS.ORDERS, []);
-    return loaded && loaded.length > 0 ? loaded : INITIAL_ORDERS;
-  });
-  const [bargainOffers, setBargainOffers] = useState<BargainOffer[]>(() => {
-    const loaded = loadFromStorage<BargainOffer[]>(STORAGE_KEYS.BARGAINS, []);
-    return loaded && loaded.length > 0 ? loaded : INITIAL_BARGAINS;
-  });
+  const [boards, setBoards] = useState<DonorBoard[]>(() =>
+    loadFromStorage<DonorBoard[]>(STORAGE_KEYS.BOARDS, INITIAL_DONOR_BOARDS)
+  );
+  const [components, setComponents] = useState<HarvestableComponent[]>(() =>
+    loadFromStorage<HarvestableComponent[]>(STORAGE_KEYS.COMPONENTS, INITIAL_COMPONENTS)
+  );
+  const [orders, setOrders] = useState<Order[]>(() =>
+    loadFromStorage<Order[]>(STORAGE_KEYS.ORDERS, INITIAL_ORDERS)
+  );
+  const [bargainOffers, setBargainOffers] = useState<BargainOffer[]>(() =>
+    loadFromStorage<BargainOffer[]>(STORAGE_KEYS.BARGAINS, INITIAL_BARGAINS)
+  );
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>(() =>
     loadFromStorage(STORAGE_KEYS.TICKETS, [])
+  );
+  const [proDirectoryOverrides, setProDirectoryOverrides] = useState<Record<string, boolean>>(() =>
+    loadFromStorage(STORAGE_KEYS.PRO_OVERRIDES, {})
   );
   const [currentUser, setCurrentUser] = useState<UserProfile>(() =>
     loadFromStorage(
@@ -252,6 +286,9 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       loadFromStorage(STORAGE_KEYS.USER, DEFAULT_GUEST_PROFILE)
     )
   );
+  const [pendingCheckoutTarget, setPendingCheckoutTarget] =
+    useState<PendingCheckoutTarget | null>(null);
+
   const isSignedIn = currentUser.id !== DEFAULT_GUEST_PROFILE.id && !!currentUser.email;
 
   const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
@@ -272,17 +309,20 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
 
-  // Compute technician wallet balance & completed jobs dynamically from actual completed orders
+  // Compute technician wallet balance & completed jobs dynamically from all post-extraction orders
   const { techWalletBalanceInr, techCompletedJobsCount } = useMemo(() => {
     const completedExtractions = orders.filter(
       (o) =>
         o.mode === 'EXTRACTED_TESTED_PART' &&
-        (o.status === 'READY_FOR_DISPATCH' || o.status === 'COMPLETED')
+        (o.status === 'READY_FOR_DISPATCH' ||
+          o.status === 'PICKED_UP_BY_PARTNER' ||
+          o.status === 'DELIVERED' ||
+          o.status === 'COMPLETED')
     );
     const count = completedExtractions.length;
     const balance = Number(
       completedExtractions
-        .reduce((sum, o) => sum + o.extractionFeeInr * 0.7, 0)
+        .reduce((sum, o) => sum + (o.extractionFeeInr ?? 0) * 0.7, 0)
         .toFixed(2)
     );
     return {
@@ -334,6 +374,14 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
 
   useEffect(() => {
     try {
+      localStorage.setItem(STORAGE_KEYS.PRO_OVERRIDES, JSON.stringify(proDirectoryOverrides));
+    } catch {
+      // ignore
+    }
+  }, [proDirectoryOverrides]);
+
+  useEffect(() => {
+    try {
       localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(currentUser));
       if (currentUser.id !== DEFAULT_GUEST_PROFILE.id && currentUser.email) {
         localStorage.setItem(USER_SESSION_KEY, JSON.stringify(currentUser));
@@ -346,12 +394,22 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [currentUser]);
 
   // Restore a real Supabase OAuth / email session & subscribe to auth state changes
+  // Preserves local Pro membership and Owner Admin flags so session refresh never downgrades a user
   useEffect(() => {
     let cancelled = false;
+    const mergeSessionProfile = (profile: UserProfile) => {
+      setCurrentUser((prev) => ({
+        ...profile,
+        isProMember: prev.isProMember ?? profile.isProMember ?? false,
+        proMembershipExpiry: prev.proMembershipExpiry ?? profile.proMembershipExpiry,
+        isOwnerAdmin: prev.isOwnerAdmin ?? profile.isOwnerAdmin ?? false,
+      }));
+    };
+
     restoreSupabaseAuthSession()
       .then((profile) => {
         if (!cancelled && profile) {
-          setCurrentUser(profile);
+          mergeSessionProfile(profile);
           setActiveTab((prev) => (prev === 'LOGIN' ? 'MARKETPLACE' : prev));
         }
       })
@@ -366,7 +424,7 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         restoreSupabaseAuthSession()
           .then((profile) => {
             if (!cancelled && profile) {
-              setCurrentUser(profile);
+              mergeSessionProfile(profile);
               setActiveTab((prev) => (prev === 'LOGIN' ? 'MARKETPLACE' : prev));
             }
           })
@@ -380,7 +438,7 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     };
   }, []);
 
-  // Cross-tab BroadcastChannel sync
+  // Cross-tab BroadcastChannel sync (includes bargainOffers & currentUser)
   const broadcastLocalStateUpdate = useCallback(() => {
     try {
       broadcastChannelRef.current?.postMessage({ type: 'STATE_UPDATED' });
@@ -401,7 +459,15 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         setBoards(loadFromStorage(STORAGE_KEYS.BOARDS, INITIAL_DONOR_BOARDS));
         setComponents(loadFromStorage(STORAGE_KEYS.COMPONENTS, INITIAL_COMPONENTS));
         setOrders(loadFromStorage(STORAGE_KEYS.ORDERS, INITIAL_ORDERS));
+        setBargainOffers(loadFromStorage(STORAGE_KEYS.BARGAINS, INITIAL_BARGAINS));
         setSupportTickets(loadFromStorage(STORAGE_KEYS.TICKETS, []));
+        setProDirectoryOverrides(loadFromStorage(STORAGE_KEYS.PRO_OVERRIDES, {}));
+        setCurrentUser(
+          loadFromStorage(
+            USER_SESSION_KEY,
+            loadFromStorage(STORAGE_KEYS.USER, DEFAULT_GUEST_PROFILE)
+          )
+        );
       }
     };
 
@@ -410,7 +476,7 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     };
   }, []);
 
-  // Sync from Supabase on mount
+  // Sync from Supabase on mount (never overwrite local catalog with empty arrays if cloud table is unseeded)
   const refreshFromSupabase = useCallback(async () => {
     const client = getSupabaseClient();
     if (!client) {
@@ -426,10 +492,18 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       ]);
 
       if (snapshot) {
-        setBoards(snapshot.boards);
-        setComponents(snapshot.components);
-        setOrders(snapshot.orders);
-        setSupportTickets(tickets);
+        if (snapshot.boards.length > 0) {
+          setBoards(snapshot.boards);
+        }
+        if (snapshot.components.length > 0) {
+          setComponents(snapshot.components);
+        }
+        if (snapshot.orders.length > 0) {
+          setOrders(snapshot.orders);
+        }
+        if (tickets.length > 0) {
+          setSupportTickets(tickets);
+        }
         setConnectionMode('SUPABASE_CLOUD');
         setLastSyncError(null);
       }
@@ -613,51 +687,51 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       ? components.find((c) => c.id === payload.componentId) || null
       : null;
 
+    const isPro = Boolean(payload.isProOrder ?? currentUser.isProMember);
     const isSameDistrict =
       (payload.buyerDistrict || 'Chennai').toLowerCase().trim() ===
-      (targetBoard.sellerDistrict || 'Chennai').toLowerCase().trim();
+      (targetBoard.sellerDistrict || targetBoard.locationCity || 'Chennai')
+        .toLowerCase()
+        .trim();
 
-    let deliveryFeeInr = payload.deliveryFeeInr;
-    if (deliveryFeeInr === undefined) {
-      if (payload.deliveryType === 'CAMPUS_HUB_PICKUP') {
-        deliveryFeeInr = 0;
-      } else if (payload.deliveryType === 'HYPERLOCAL_RAPIDO') {
-        deliveryFeeInr = 39;
-      } else if (payload.deliveryType === 'HYPERLOCAL_DUNZO') {
-        deliveryFeeInr = 45;
-      } else if (payload.deliveryType === 'HYPERLOCAL_PORTER') {
-        deliveryFeeInr = 55;
-      } else if (payload.deliveryType === 'OUTSTATION_DELHIVERY') {
-        deliveryFeeInr = 69;
-      } else {
-        deliveryFeeInr = isSameDistrict ? 45 : 49;
-      }
-    }
+    const breakdown = calculateOrderBreakdown({
+      board: targetBoard,
+      component: targetComp,
+      mode: payload.mode,
+      deliveryType: payload.deliveryType,
+      isSameDistrict,
+      isProMember: isPro,
+      buyerId: currentUser.id,
+      bargainOffers,
+    });
 
-    const itemPriceInr =
-      payload.mode === 'RAW_DONOR_BOARD'
-        ? targetBoard.rawBoardPriceInr
-        : targetComp
-        ? targetComp.partPriceInr
-        : 0;
-
-    const extractionFeeInr =
-      payload.mode === 'RAW_DONOR_BOARD'
-        ? 0
-        : targetComp
-        ? targetComp.extractionFeeInr
-        : 0;
-
-    const isPro = payload.isProOrder ?? currentUser.isProMember ?? false;
-    const bargainDiscount = payload.bargainDiscountInr ?? 0;
+    const itemPriceInr = breakdown.itemPriceInr;
+    const extractionFeeInr = breakdown.extractionFeeInr;
+    const deliveryFeeInr = payload.deliveryFeeInr ?? breakdown.deliveryFeeInr;
+    const bargainDiscountInr = payload.bargainDiscountInr ?? breakdown.bargainDiscountInr;
     const platformCommissionInr =
-      payload.platformCommissionInr ??
-      (isPro ? 0 : Math.min(15, Math.max(5, Math.round((itemPriceInr + extractionFeeInr) * 0.05))));
-
+      payload.platformCommissionInr ?? breakdown.platformCommissionInr;
     const totalPayableInr =
       payload.totalPriceInr ??
-      Math.max(0, itemPriceInr - bargainDiscount + extractionFeeInr + platformCommissionInr + deliveryFeeInr);
-    const orderNum = 2040 + orders.length + 1;
+      Math.max(
+        0,
+        itemPriceInr -
+          bargainDiscountInr +
+          extractionFeeInr +
+          platformCommissionInr +
+          deliveryFeeInr
+      );
+
+    const redeemedBargainId =
+      payload.redeemedBargainId ?? breakdown.matchedBargain?.id;
+    const resolvedPartnerLabel =
+      payload.logisticsPartner || breakdown.logisticsPartnerLabel;
+
+    const orderNum = getNextNumericId(
+      orders.map((o) => o.orderCode || o.id),
+      'SH-ORD-',
+      2040
+    );
     const orderCode = `SH-ORD-${orderNum}`;
 
     const newOrder: Order = {
@@ -669,11 +743,12 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       buyerState: payload.buyerState || 'Tamil Nadu',
       buyerDistrict: payload.buyerDistrict || 'Chennai',
       buyerPincode: payload.buyerPincode || '600001',
+      sellerDistrict: targetBoard.sellerDistrict || targetBoard.locationCity || 'Chennai',
       donorBoardId: payload.donorBoardId,
       componentId: payload.componentId,
       mode: payload.mode,
       deliveryType: payload.deliveryType,
-      logisticsPartner: payload.logisticsPartner || 'Rapido Bike Parcel',
+      logisticsPartner: resolvedPartnerLabel,
       itemPriceInr,
       extractionFeeInr,
       deliveryFeeInr,
@@ -681,7 +756,8 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       totalPayableInr,
       totalPriceInr: totalPayableInr,
       isProOrder: isPro,
-      bargainDiscountInr: bargainDiscount,
+      bargainDiscountInr,
+      redeemedBargainId,
       status:
         payload.mode === 'RAW_DONOR_BOARD'
           ? 'READY_FOR_DISPATCH'
@@ -695,6 +771,15 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       paymentUtr: payload.upiUtrOrPaymentId || '',
       createdAt: new Date().toISOString(),
     };
+
+    // Single-use bargain invariant: immediately transition redeemed bargain to 'REDEEMED'
+    if (redeemedBargainId) {
+      setBargainOffers((prev) =>
+        prev.map((b) =>
+          b.id === redeemedBargainId ? { ...b, status: 'REDEEMED' } : b
+        )
+      );
+    }
 
     // Optimistic Atomic Local Update
     if (payload.mode === 'RAW_DONOR_BOARD') {
@@ -749,7 +834,7 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         componentId: payload.componentId,
         mode: payload.mode,
         deliveryType: payload.deliveryType,
-        logisticsPartner: payload.logisticsPartner,
+        logisticsPartner: resolvedPartnerLabel,
         itemPriceInr,
         extractionFeeInr,
         deliveryFeeInr,
@@ -765,24 +850,38 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const publishDonorBoard = (input: NewBoardListingInput): DonorBoard => {
-    const nextBoardNumber = 100 + boards.length + 1;
+    const nextBoardNumber = getNextNumericId(
+      boards.map((b) => b.id),
+      'BRD-',
+      100
+    );
     const newBoardId = `BRD-${nextBoardNumber}`;
 
-    const componentsList = input.components && input.components.length > 0
-      ? input.components
-      : [
-          {
-            partNumber: input.subModel || input.boardName,
-            partName: `${input.boardName} (Intact Functional Sub-assembly)`,
-            componentCategory: 'Core Module',
-            packageType: 'Module',
-            difficulty: 'LEVEL_1_PLUG_PULL' as const,
-            recommendedTempC: 25,
-            partPriceInr: input.rawBoardPriceInr,
-            extractionFeeInr: 15,
-            isPrimaryFault: false,
-          },
-        ];
+    const hwMode = input.hardwareMode || 'READY_TO_USE';
+
+    const componentsList =
+      input.components && input.components.length > 0
+        ? input.components
+        : [
+            {
+              partNumber: input.subModel || input.boardName,
+              partName: `${input.boardName} (${
+                hwMode === 'SOLDERED_RAW'
+                  ? 'Raw Donor Assembly'
+                  : 'Intact Functional Sub-assembly'
+              })`,
+              componentCategory: 'Core Module',
+              packageType: hwMode === 'SOLDERED_RAW' ? 'Soldered PCB' : 'Module',
+              difficulty:
+                hwMode === 'SOLDERED_RAW'
+                  ? ('LEVEL_2_BASIC_IRON' as const)
+                  : ('LEVEL_1_PLUG_PULL' as const),
+              recommendedTempC: hwMode === 'SOLDERED_RAW' ? 320 : 25,
+              partPriceInr: input.rawBoardPriceInr,
+              extractionFeeInr: hwMode === 'READY_TO_USE' ? 0 : 15,
+              isPrimaryFault: false,
+            },
+          ];
 
     const intactCount = componentsList.filter((c) => !c.isPrimaryFault).length;
     const district = input.sellerDistrict || 'Chennai';
@@ -803,8 +902,14 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       distanceKm: input.distanceKm,
       primaryFault: input.primaryFault,
       rawBoardPriceInr: input.rawBoardPriceInr,
-      desolderedPriceInr: input.desolderedPriceInr ?? (input.hardwareMode === 'SOLDERED_RAW' ? undefined : input.rawBoardPriceInr + 25),
-      hardwareMode: input.hardwareMode || 'READY_TO_USE',
+      desolderedPriceInr:
+        input.desolderedPriceInr ??
+        (hwMode === 'SOLDERED_RAW'
+          ? undefined
+          : hwMode === 'READY_TO_USE'
+          ? input.rawBoardPriceInr
+          : input.rawBoardPriceInr + 25),
+      hardwareMode: hwMode,
       allowBargain: input.allowBargain ?? true,
       isVerified: input.isVerified ?? true,
       imageUrl: input.imageUrl,
@@ -852,9 +957,15 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     return newBoard;
   };
 
-  const submitBargainOffer = (offerInput: Omit<BargainOffer, 'id' | 'status' | 'createdAt'>): BargainOffer => {
+  const submitBargainOffer = (
+    offerInput: Omit<BargainOffer, 'id' | 'status' | 'createdAt'>
+  ): BargainOffer => {
+    const targetType = offerInput.targetType || (offerInput.componentId ? 'COMPONENT' : 'BOARD');
+    const targetId = offerInput.targetId || offerInput.componentId || offerInput.boardId;
     const newOffer: BargainOffer = {
       ...offerInput,
+      targetType,
+      targetId,
       id: `BRG-${Date.now().toString().slice(-6)}`,
       status: 'PENDING',
       createdAt: new Date().toISOString(),
@@ -900,7 +1011,16 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     broadcastLocalStateUpdate();
   };
 
-  const toggleUserProStatus = () => {
+  const toggleUserProStatus = (userId?: string) => {
+    if (userId && userId !== currentUser.id) {
+      setProDirectoryOverrides((prev) => ({
+        ...prev,
+        [userId]: !(prev[userId] ?? false),
+      }));
+      broadcastLocalStateUpdate();
+      return;
+    }
+
     const nextStatus = !currentUser.isProMember;
     const updatedUser: UserProfile = {
       ...currentUser,
@@ -949,10 +1069,44 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     broadcastLocalStateUpdate();
   };
 
+  // Synchronizes board rawBoardPriceInr, desolderedPriceInr, and single-module component price
   const updateBoardPrice = (boardId: string, newPrice: number) => {
+    const clampedPrice = Math.max(1, Math.round(newPrice));
+    const existingBoard = boards.find((b) => b.id === boardId);
+    const oldRawPrice = existingBoard?.rawBoardPriceInr;
+
     setBoards((prev) =>
-      prev.map((b) => (b.id === boardId ? { ...b, rawBoardPriceInr: Math.max(1, newPrice) } : b))
+      prev.map((b) => {
+        if (b.id !== boardId) return b;
+        const nextDesoldered =
+          b.hardwareMode === 'SOLDERED_RAW'
+            ? undefined
+            : b.hardwareMode === 'READY_TO_USE'
+            ? clampedPrice
+            : clampedPrice + 25;
+        return {
+          ...b,
+          rawBoardPriceInr: clampedPrice,
+          desolderedPriceInr: nextDesoldered,
+        };
+      })
     );
+
+    // Sync child component price if it was a single-module auto-generated listing
+    setComponents((prev) => {
+      const boardComps = prev.filter((c) => c.donorBoardId === boardId);
+      if (boardComps.length === 1 || oldRawPrice !== undefined) {
+        return prev.map((c) => {
+          if (c.donorBoardId !== boardId) return c;
+          if (boardComps.length === 1 || c.partPriceInr === oldRawPrice) {
+            return { ...c, partPriceInr: clampedPrice };
+          }
+          return c;
+        });
+      }
+      return prev;
+    });
+
     broadcastLocalStateUpdate();
   };
 
@@ -1085,6 +1239,7 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     setOrders(INITIAL_ORDERS);
     setBargainOffers(INITIAL_BARGAINS);
     setSupportTickets([]);
+    setProDirectoryOverrides({});
     setCurrentUser(DEFAULT_GUEST_PROFILE);
     setActiveTab('LOGIN');
     broadcastLocalStateUpdate();
@@ -1102,7 +1257,10 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         techCompletedJobsCount,
         activeTab,
         setActiveTab,
+        pendingCheckoutTarget,
+        setPendingCheckoutTarget,
         currentUser,
+        proDirectoryOverrides,
         switchDemoRole,
         updateUserProfile,
         signInWithEmail,

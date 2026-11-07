@@ -1,25 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Camera,
-  Upload,
   CheckCircle2,
-  MapPin,
   ArrowRight,
-  ShieldCheck,
-  Tag,
-  DollarSign,
   Package,
   Trash2,
-  Sliders,
   Sparkles,
-  HelpCircle,
-  TrendingDown,
-  Layers,
-  Cpu,
-  Tv,
-  Zap,
-  Battery,
-  Laptop,
+  Phone,
+  UserCheck,
 } from 'lucide-react';
 import { useHarvestStore } from '../store/useHarvestStore';
 import {
@@ -28,6 +16,7 @@ import {
   INDIAN_STATES_DISTRICTS,
 } from '../data/catalogPricing';
 import { HardwareMode, DonorBoard, BoardCategory } from '../types/harvest';
+import { Tilt3DCard } from './Tilt3DCard';
 
 export const SellerPortal: React.FC = () => {
   const { publishDonorBoard, setActiveTab, currentUser } = useHarvestStore();
@@ -36,12 +25,19 @@ export const SellerPortal: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
 
   // Form State
-  const [selectedCategory, setSelectedCategory] = useState<CatalogCategory>(CATALOG_CATEGORIES[0]);
+  const [selectedCategory, setSelectedCategory] = useState<CatalogCategory>(
+    CATALOG_CATEGORIES[0]
+  );
   const [boardName, setBoardName] = useState<string>('');
-  const [primaryFault, setPrimaryFault] = useState<string>('Salvage component / board tested intact');
-  const [hardwareMode, setHardwareMode] = useState<HardwareMode>('READY_TO_USE');
+  const [primaryFault, setPrimaryFault] = useState<string>(
+    'Salvage component / board tested intact'
+  );
+  const [hardwareMode, setHardwareMode] =
+    useState<HardwareMode>('READY_TO_USE');
   const [allowBargain, setAllowBargain] = useState<boolean>(true);
-  const [sellingPrice, setSellingPrice] = useState<number>(CATALOG_CATEGORIES[0].recommendedPrice);
+  const [sellingPrice, setSellingPrice] = useState<number>(
+    CATALOG_CATEGORIES[0].recommendedPrice
+  );
 
   // Photo Upload State
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -49,14 +45,24 @@ export const SellerPortal: React.FC = () => {
   const [isProcessingImage, setIsProcessingImage] = useState(false);
 
   // Location & Seller State
-  const [sellerName, setSellerName] = useState<string>(currentUser.fullName || 'Verified Seller');
+  const [sellerName, setSellerName] = useState<string>(
+    currentUser.fullName || 'Rajan Electronics Lab'
+  );
   const [sellerPhone, setSellerPhone] = useState<string>(
-    currentUser.phone ? currentUser.phone.replace(/\D/g, '').slice(-10) : '9840123456'
+    currentUser.phone
+      ? currentUser.phone.replace(/\D/g, '').slice(-10)
+      : '9840123456'
   );
   const [state, setState] = useState<string>(currentUser.state || 'Tamil Nadu');
-  const [district, setDistrict] = useState<string>(currentUser.district || 'Chennai');
-  const [locationArea, setLocationArea] = useState<string>(currentUser.defaultAddress || 'Guindy Industrial Estate');
-  const [pincode, setPincode] = useState<string>(currentUser.pincode || '600025');
+  const [district, setDistrict] = useState<string>(
+    currentUser.district || 'Chennai'
+  );
+  const [locationArea, setLocationArea] = useState<string>(
+    currentUser.defaultAddress || 'Guindy Industrial Estate'
+  );
+  const [pincode, setPincode] = useState<string>(
+    currentUser.pincode || '600025'
+  );
 
   const [publishedBoard, setPublishedBoard] = useState<DonorBoard | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -72,7 +78,7 @@ export const SellerPortal: React.FC = () => {
 
   // Sync user profile changes
   useEffect(() => {
-    if (currentUser.fullName && sellerName === 'Verified Seller') {
+    if (currentUser.fullName) {
       setSellerName(currentUser.fullName);
     }
     if (currentUser.phone) {
@@ -133,31 +139,60 @@ export const SellerPortal: React.FC = () => {
       return;
     }
 
-    if (sellingPrice < selectedCategory.minPrice || sellingPrice > selectedCategory.maxPrice * 2) {
-      setErrorMsg(`Please specify a fair price between ₹${selectedCategory.minPrice} and ₹${selectedCategory.maxPrice * 2}.`);
+    if (
+      sellingPrice < selectedCategory.minPrice ||
+      sellingPrice > selectedCategory.maxPrice * 2
+    ) {
+      setErrorMsg(
+        `Please specify a fair price between ₹${selectedCategory.minPrice} and ₹${
+          selectedCategory.maxPrice * 2
+        }.`
+      );
       setCurrentStep(4);
       return;
     }
+
+    const cleanDigits = sellerPhone.replace(/\D/g, '').slice(-10);
+    if (cleanDigits.length !== 10) {
+      setErrorMsg(
+        'Please enter a valid 10-digit WhatsApp / Mobile Number so buyers can reach you.'
+      );
+      setCurrentStep(4);
+      return;
+    }
+
+    const buyerActiveDistrict = (currentUser.district || 'Chennai')
+      .toLowerCase()
+      .trim();
+    const isSameDistrictAsUser =
+      district.toLowerCase().trim() === buyerActiveDistrict;
 
     const newBoard = publishDonorBoard({
       boardName: boardName.trim(),
       category: selectedCategory.id as BoardCategory,
       subModel: boardName.trim(),
       sellerName: sellerName.trim() || 'Electronics Recycler',
-      sellerPhone: sellerPhone ? `+91 ${sellerPhone}` : '+91 98401 23456',
+      sellerPhone: `+91 ${cleanDigits}`,
       sellerState: state,
       sellerDistrict: district,
       sellerPincode: pincode,
       sellerFullAddress: `${locationArea}, ${district}`,
       locationArea: locationArea || 'Tech Salvage Yard',
-      distanceKm: 3.2,
+      distanceKm: isSameDistrictAsUser ? 3.2 : 340.0,
       primaryFault: primaryFault.trim() || 'Tested functional spare',
       rawBoardPriceInr: sellingPrice,
-      desolderedPriceInr: hardwareMode === 'SOLDERED_RAW' ? undefined : sellingPrice + 25,
+      desolderedPriceInr:
+        hardwareMode === 'SOLDERED_RAW'
+          ? undefined
+          : hardwareMode === 'READY_TO_USE'
+          ? sellingPrice
+          : sellingPrice + 25,
       hardwareMode,
       allowBargain,
       isVerified: true,
-      imageUrl: imageUrl || 'https://images.unsplash.com/photo-1553406830-ef2513450d76?auto=format&fit=crop&w=600&q=80',
+      imageUrl:
+        imageUrl ||
+        'https://images.unsplash.com/photo-1553406830-ef2513450d76?auto=format&fit=crop&w=600&q=80',
     });
 
     setPublishedBoard(newBoard);
@@ -166,17 +201,19 @@ export const SellerPortal: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-24 text-slate-900">
       {/* Hero Header */}
-      <section className="bg-[#0F172A] px-4 py-8 sm:px-6 lg:px-8 text-white border-b border-slate-800">
+      <section className="bg-[#0F172A] px-4 py-8 sm:px-6 lg:px-8 text-white border-b border-slate-800 rounded-3xl mb-6">
         <div className="mx-auto max-w-4xl text-center sm:text-left">
           <div className="inline-flex items-center gap-2 rounded-full bg-emerald-500/20 px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-emerald-400 border border-emerald-500/30">
             <Sparkles className="h-3.5 w-3.5" />
             30-Second Ultra-Simple Listing
           </div>
-          <h1 className="mt-3 text-2xl sm:text-3xl lg:text-4xl font-extrabold text-white">
-            Sell Electronics Spares & E-Waste Donor Boards
+          <h1 className="mt-3 text-2xl sm:text-3xl lg:text-4xl font-extrabold text-white font-display">
+            Sell Electronics Spares &amp; E-Waste Donor Boards
           </h1>
           <p className="mt-2 text-xs sm:text-sm text-slate-300 max-w-2xl">
-            List individual ICs, appliance PCBs, battery cells, or complete scrap assemblies. Connect directly with buyers and technicians in your district.
+            List individual ICs, appliance PCBs, battery cells, or complete
+            scrap assemblies. Connect directly with buyers and technicians in
+            your district.
           </p>
 
           {/* Step Progress Indicators */}
@@ -190,7 +227,7 @@ export const SellerPortal: React.FC = () => {
               <button
                 key={step.num}
                 type="button"
-                onClick={() => setCurrentStep(step.num as any)}
+                onClick={() => setCurrentStep(step.num as 1 | 2 | 3 | 4)}
                 className={`min-h-[44px] rounded-xl px-2 py-2 text-xs font-bold text-center transition-all ${
                   currentStep === step.num
                     ? 'bg-emerald-500 text-slate-950 shadow-md font-extrabold'
@@ -207,16 +244,22 @@ export const SellerPortal: React.FC = () => {
       </section>
 
       {/* Main Container */}
-      <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 mt-6">
+      <div className="mx-auto max-w-4xl px-1 sm:px-4">
         {publishedBoard ? (
           /* Success Screen */
           <div className="rounded-3xl border border-emerald-300 bg-white p-6 sm:p-8 shadow-xl text-center space-y-4 animate-fadeIn">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
               <CheckCircle2 className="h-8 w-8" />
             </div>
-            <h2 className="text-2xl font-black text-slate-900">Spares Published Successfully!</h2>
+            <h2 className="text-2xl font-black text-slate-900 font-display">
+              Spares Published Successfully!
+            </h2>
             <p className="text-sm text-slate-600 max-w-md mx-auto">
-              <strong>{publishedBoard.boardName}</strong> is now live on the SiliconHarvest Marketplace at <strong>₹{publishedBoard.rawBoardPriceInr}</strong> in <strong>{publishedBoard.sellerDistrict}</strong>.
+              <strong>{publishedBoard.boardName}</strong> is now live on the
+              SiliconHarvest Marketplace at{' '}
+              <strong>₹{publishedBoard.rawBoardPriceInr}</strong> in{' '}
+              <strong>{publishedBoard.sellerDistrict}</strong> (Seller:{' '}
+              {publishedBoard.sellerName} • {publishedBoard.sellerPhone}).
             </p>
 
             <div className="inline-flex flex-wrap items-center justify-center gap-3 pt-2">
@@ -253,16 +296,22 @@ export const SellerPortal: React.FC = () => {
             {currentStep === 1 && (
               <div className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-7 shadow-sm space-y-4">
                 <div>
-                  <h2 className="text-lg font-black text-slate-900">Step 1: Choose Hardware Category</h2>
-                  <p className="text-xs text-slate-500">Select the category that matches your component or donor PCB.</p>
+                  <h2 className="text-lg font-black text-slate-900 font-display">
+                    Step 1: Choose Hardware Category
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Select the category that matches your component or donor
+                    PCB.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {CATALOG_CATEGORIES.map((cat) => {
                     const isSelected = selectedCategory.id === cat.id;
                     return (
-                      <div
+                      <Tilt3DCard
                         key={cat.id}
+                        intensity={4}
                         onClick={() => handleSelectCategory(cat)}
                         className={`cursor-pointer rounded-2xl border-2 p-4 transition-all flex items-start gap-3 ${
                           isSelected
@@ -270,21 +319,29 @@ export const SellerPortal: React.FC = () => {
                             : 'border-slate-200 bg-white hover:border-slate-300'
                         }`}
                       >
-                        <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
-                          isSelected ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'
-                        }`}>
-                          <Package className="h-5 w-5" />
+                        <div
+                          className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-base ${
+                            isSelected
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-slate-100 text-slate-700'
+                          }`}
+                        >
+                          {cat.icon || <Package className="h-5 w-5" />}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
-                            <span className="font-bold text-xs sm:text-sm text-slate-900 truncate">{cat.name}</span>
+                            <span className="font-bold text-xs sm:text-sm text-slate-900 truncate font-display">
+                              {cat.name}
+                            </span>
                           </div>
-                          <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{cat.description}</p>
-                          <div className="mt-2 inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
+                          <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
+                            {cat.description}
+                          </p>
+                          <div className="mt-2 inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700 font-mono">
                             Fair Range: ₹{cat.minPrice} – ₹{cat.maxPrice}
                           </div>
                         </div>
-                      </div>
+                      </Tilt3DCard>
                     );
                   })}
                 </div>
@@ -306,13 +363,19 @@ export const SellerPortal: React.FC = () => {
             {currentStep === 2 && (
               <div className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-7 shadow-sm space-y-5">
                 <div>
-                  <h2 className="text-lg font-black text-slate-900">Step 2: What Are You Selling?</h2>
-                  <p className="text-xs text-slate-500">Enter component name or click a quick-fill chip below.</p>
+                  <h2 className="text-lg font-black text-slate-900 font-display">
+                    Step 2: What Are You Selling?
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Enter component name or click a quick-fill chip below.
+                  </p>
                 </div>
 
                 {/* Quick-fill chips */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-700 block">Popular Spares in {selectedCategory.name}:</label>
+                  <label className="text-xs font-bold text-slate-700 block">
+                    Popular Spares in {selectedCategory.name}:
+                  </label>
                   <div className="flex flex-wrap gap-1.5">
                     {selectedCategory.quickFillChips.map((chip) => (
                       <button
@@ -333,7 +396,9 @@ export const SellerPortal: React.FC = () => {
 
                 {/* Product Name Input */}
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700 block">Product / Part Name *</label>
+                  <label className="text-xs font-bold text-slate-700 block">
+                    Product / Part Name *
+                  </label>
                   <input
                     type="text"
                     required
@@ -346,7 +411,9 @@ export const SellerPortal: React.FC = () => {
 
                 {/* Hardware Mode Selector */}
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-700 block">Hardware Supply Mode</label>
+                  <label className="text-xs font-bold text-slate-700 block">
+                    Hardware Supply Mode
+                  </label>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     <div
                       onClick={() => setHardwareMode('READY_TO_USE')}
@@ -357,7 +424,9 @@ export const SellerPortal: React.FC = () => {
                       }`}
                     >
                       <div className="font-bold">Ready-to-Use</div>
-                      <div className="text-[11px] text-slate-500 font-normal mt-0.5">Desoldered, tested & clean</div>
+                      <div className="text-[11px] text-slate-500 font-normal mt-0.5">
+                        Desoldered, tested &amp; clean (₹0 QC fee)
+                      </div>
                     </div>
 
                     <div
@@ -369,7 +438,9 @@ export const SellerPortal: React.FC = () => {
                       }`}
                     >
                       <div className="font-bold">Soldered on Board</div>
-                      <div className="text-[11px] text-slate-500 font-normal mt-0.5">As-is whole donor PCB</div>
+                      <div className="text-[11px] text-slate-500 font-normal mt-0.5">
+                        As-is whole donor PCB only
+                      </div>
                     </div>
 
                     <div
@@ -381,14 +452,18 @@ export const SellerPortal: React.FC = () => {
                       }`}
                     >
                       <div className="font-bold">Both Available</div>
-                      <div className="text-[11px] text-slate-500 font-normal mt-0.5">Raw or extraction (+₹25)</div>
+                      <div className="text-[11px] text-slate-500 font-normal mt-0.5">
+                        Raw or extraction (+QC fee)
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Condition / Fault note */}
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700 block">Condition / Primary Fault Note</label>
+                  <label className="text-xs font-bold text-slate-700 block">
+                    Condition / Primary Fault Note
+                  </label>
                   <input
                     type="text"
                     value={primaryFault}
@@ -422,8 +497,13 @@ export const SellerPortal: React.FC = () => {
             {currentStep === 3 && (
               <div className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-7 shadow-sm space-y-5">
                 <div>
-                  <h2 className="text-lg font-black text-slate-900">Step 3: Upload Product Photo</h2>
-                  <p className="text-xs text-slate-500">Native mobile camera or file dropzone. Compressed locally on your browser.</p>
+                  <h2 className="text-lg font-black text-slate-900 font-display">
+                    Step 3: Upload Product Photo
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Native mobile camera or file dropzone. Compressed locally on
+                    your browser.
+                  </p>
                 </div>
 
                 <input
@@ -451,7 +531,9 @@ export const SellerPortal: React.FC = () => {
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
-                    <p className="text-[11px] text-slate-500 text-center">Photo compressed and verified for high-resolution listing.</p>
+                    <p className="text-[11px] text-slate-500 text-center">
+                      Photo compressed and verified for high-resolution listing.
+                    </p>
                   </div>
                 ) : (
                   <div
@@ -462,11 +544,17 @@ export const SellerPortal: React.FC = () => {
                       <Camera className="h-7 w-7" />
                     </div>
                     <div>
-                      <p className="font-bold text-sm text-slate-900">Tap to Take Photo or Upload Image</p>
-                      <p className="text-xs text-slate-500 mt-0.5">JPEG, PNG, WebP supported • Zero cloud upload delay</p>
+                      <p className="font-bold text-sm text-slate-900">
+                        Tap to Take Photo or Upload Image
+                      </p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        JPEG, PNG, WebP supported • Zero cloud upload delay
+                      </p>
                     </div>
                     {isProcessingImage && (
-                      <span className="text-xs font-semibold text-emerald-600 animate-pulse">Compressing photo...</span>
+                      <span className="text-xs font-semibold text-emerald-600 animate-pulse">
+                        Compressing photo...
+                      </span>
                     )}
                   </div>
                 )}
@@ -491,26 +579,37 @@ export const SellerPortal: React.FC = () => {
               </div>
             )}
 
-            {/* STEP 4: FAIR PRICE RANGE SLIDER & LOCATION */}
+            {/* STEP 4: FAIR PRICE RANGE SLIDER & SELLER CONTACT / LOCATION */}
             {currentStep === 4 && (
               <div className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-7 shadow-sm space-y-6">
                 <div>
-                  <h2 className="text-lg font-black text-slate-900">Step 4: Fair Price Range & Publish</h2>
-                  <p className="text-xs text-slate-500">Know what it's worth. Adjust the slider within the circular-economy benchmark.</p>
+                  <h2 className="text-lg font-black text-slate-900 font-display">
+                    Step 4: Fair Price, Seller Contact &amp; Publish
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Know what it&apos;s worth. Adjust the slider within the
+                    circular-economy benchmark.
+                  </p>
                 </div>
 
                 {/* Interactive Fair Price Range Slider */}
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Know What It's Worth</span>
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                        Know What It&apos;s Worth
+                      </span>
                       <div className="text-xs text-slate-600 mt-0.5">
                         Benchmark for <strong>{selectedCategory.name}</strong>
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-2xl font-black text-emerald-600">₹{sellingPrice}</div>
-                      <span className="text-[11px] text-slate-400">Fixed Component Price</span>
+                      <div className="text-2xl font-black text-emerald-600 font-mono">
+                        ₹{sellingPrice}
+                      </div>
+                      <span className="text-[11px] text-slate-400">
+                        Fixed Component Price
+                      </span>
                     </div>
                   </div>
 
@@ -527,23 +626,29 @@ export const SellerPortal: React.FC = () => {
                     />
                     <div className="flex justify-between text-[11px] font-mono text-slate-500">
                       <span>Min: ₹{selectedCategory.minPrice}</span>
-                      <span className="text-emerald-700 font-bold">Recommended: ₹{selectedCategory.recommendedPrice}</span>
+                      <span className="text-emerald-700 font-bold">
+                        Recommended: ₹{selectedCategory.recommendedPrice}
+                      </span>
                       <span>Max: ₹{selectedCategory.maxPrice}</span>
                     </div>
                   </div>
 
                   {/* Manual input fallback */}
                   <div className="flex items-center gap-2 pt-2 border-t border-slate-200">
-                    <span className="text-xs text-slate-600 font-medium">Or type exact price:</span>
+                    <span className="text-xs text-slate-600 font-medium">
+                      Or type exact price:
+                    </span>
                     <div className="relative w-32">
-                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">₹</span>
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                        ₹
+                      </span>
                       <input
                         type="number"
                         min={selectedCategory.minPrice}
                         max={selectedCategory.maxPrice * 2}
                         value={sellingPrice}
                         onChange={(e) => setSellingPrice(Number(e.target.value))}
-                        className="w-full pl-6 pr-2 py-1 text-xs font-bold border border-slate-300 rounded-lg"
+                        className="w-full pl-6 pr-2 py-1 text-xs font-bold font-mono border border-slate-300 rounded-lg"
                       />
                     </div>
                   </div>
@@ -562,36 +667,113 @@ export const SellerPortal: React.FC = () => {
                       🤝 Allow Pro Members to Bargain / Make Counter-Offers
                     </span>
                     <span className="text-slate-600 text-[11px] block mt-0.5">
-                      Verified repair techs can propose a discount. You can accept or decline counter-offers anytime in 1 click.
+                      Verified repair techs can propose a discount. You can
+                      accept or decline counter-offers anytime in 1 click.
                     </span>
                   </div>
                 </label>
 
-                {/* Seller Location & District */}
+                {/* Seller Identity & WhatsApp Contact */}
                 <div className="space-y-3 pt-2">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Seller Location & Logistics</h3>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Seller Identity &amp; Direct WhatsApp Contact
+                  </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="text-[11px] font-bold text-slate-700 block">District (Tamil Nadu) *</label>
+                      <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1 mb-1">
+                        <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Seller / Lab / Shop Name *</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={sellerName}
+                        onChange={(e) => setSellerName(e.target.value)}
+                        placeholder="e.g. Rajan Electronics Lab"
+                        className="w-full min-h-[42px] px-3 py-2 text-xs border border-slate-300 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1 mb-1">
+                        <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>10-Digit WhatsApp / Mobile Number *</span>
+                      </label>
+                      <input
+                        type="tel"
+                        required
+                        maxLength={10}
+                        value={sellerPhone}
+                        onChange={(e) =>
+                          setSellerPhone(e.target.value.replace(/\D/g, ''))
+                        }
+                        placeholder="9840123456"
+                        className="w-full min-h-[42px] px-3 py-2 text-xs font-mono border border-slate-300 rounded-xl"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Seller Location & District */}
+                <div className="space-y-3 pt-1">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Seller Location &amp; Logistics Hub
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                        State *
+                      </label>
                       <select
-                        value={district}
-                        onChange={(e) => setDistrict(e.target.value)}
-                        className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white font-medium"
+                        value={state}
+                        onChange={(e) => {
+                          const nextState = e.target.value;
+                          setState(nextState);
+                          const firstDist =
+                            INDIAN_STATES_DISTRICTS.find(
+                              (s) => s.state === nextState
+                            )?.districts[0] || 'Chennai';
+                          setDistrict(firstDist);
+                        }}
+                        className="w-full min-h-[42px] px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white font-medium"
                       >
-                        {(INDIAN_STATES_DISTRICTS.find((s) => s.state === state)?.districts || ['Chennai']).map((d) => (
-                          <option key={d} value={d}>{d}</option>
+                        {INDIAN_STATES_DISTRICTS.map((s) => (
+                          <option key={s.state} value={s.state}>
+                            {s.state}
+                          </option>
                         ))}
                       </select>
                     </div>
 
                     <div>
-                      <label className="text-[11px] font-bold text-slate-700 block">Area / Workshop Landmark *</label>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                        District *
+                      </label>
+                      <select
+                        value={district}
+                        onChange={(e) => setDistrict(e.target.value)}
+                        className="w-full min-h-[42px] px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white font-medium"
+                      >
+                        {(
+                          INDIAN_STATES_DISTRICTS.find((s) => s.state === state)
+                            ?.districts || ['Chennai']
+                        ).map((d) => (
+                          <option key={d} value={d}>
+                            {d}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                        Area / Workshop Landmark *
+                      </label>
                       <input
                         type="text"
                         value={locationArea}
                         onChange={(e) => setLocationArea(e.target.value)}
-                        placeholder="e.g. Guindy SIDCO, Cross Cut Rd, Gandhipuram"
-                        className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl"
+                        placeholder="e.g. Guindy SIDCO, Gandhipuram"
+                        className="w-full min-h-[42px] px-3 py-2 text-xs border border-slate-300 rounded-xl"
                       />
                     </div>
                   </div>

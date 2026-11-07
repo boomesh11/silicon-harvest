@@ -100,8 +100,16 @@ export const Header: React.FC = () => {
     },
   ];
 
-  const handleMobileNavClick = (tabId: ActiveTab) => {
+  const handleTabSelection = (tabId: ActiveTab) => {
+    if (tabId === 'OWNER_ADMIN' && currentUser.role !== 'OWNER_ADMIN') {
+      switchOwnerAdmin();
+      return;
+    }
     setActiveTab(tabId);
+  };
+
+  const handleMobileNavClick = (tabId: ActiveTab) => {
+    handleTabSelection(tabId);
     setMobileMenuOpen(false);
   };
 
@@ -133,7 +141,7 @@ export const Header: React.FC = () => {
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleTabSelection(tab.id)}
                 className={`min-h-[38px] flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap active:scale-95 transition-all duration-200 ${
                   isActive
                     ? 'bg-[#1D1D1F] text-white shadow-sm font-semibold'

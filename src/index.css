@@ -4,16 +4,32 @@
 
 @layer base {
   body {
-    background-color: #F5F5F7;
-    color: #1D1D1F;
+    background-color: #F8FAFC;
+    color: #0F172A;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     overflow-x: hidden;
   }
+
+  h1, h2, h3, .font-display {
+    font-family: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  }
+
+  .font-mono, code, pre {
+    font-family: 'JetBrains Mono', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Tactile 3D Hardware & Anodized Surfaces */
+.hardware-3d-surface {
+  background: linear-gradient(145deg, #0B0F17 0%, #07090E 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 24px 48px -12px rgba(7, 9, 14, 0.55), inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
 }
 
 /* Apple-grade translucent daylight glass surface */
 .apple-glass {
-  background: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(40px);
   -webkit-backdrop-filter: blur(40px);
   border: 1px solid rgba(15, 23, 42, 0.08);
@@ -34,7 +50,7 @@
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #F5F5F7;
+  background: #F8FAFC;
 }
 ::-webkit-scrollbar-thumb {
   background: rgba(15, 23, 42, 0.18);

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search,
   Layers,
@@ -17,11 +17,8 @@ import {
   X,
   Truck,
   MessageCircle,
-  PhoneCall,
   Crown,
   TrendingDown,
-  ArrowRight,
-  ShieldCheck,
   CheckCircle,
 } from 'lucide-react';
 import { useHarvestStore } from '../store/useHarvestStore';
@@ -34,11 +31,17 @@ import {
 } from '../types/harvest';
 import { InspectionCheckoutModal } from './InspectionCheckoutModal';
 import { DatasheetPinoutModal } from './DatasheetPinoutModal';
+import { Hardware3DStage } from './Hardware3DStage';
+import { Tilt3DCard } from './Tilt3DCard';
 import {
   CATALOG_CATEGORIES,
   CatalogCategory,
   INDIAN_STATES_DISTRICTS,
 } from '../data/catalogPricing';
+import {
+  calculateBulkCartBreakdown,
+  computeEffectiveDistanceKm,
+} from '../config/pricingEngine';
 
 export const MarketplacePortal: React.FC = () => {
   const {
@@ -48,6 +51,8 @@ export const MarketplacePortal: React.FC = () => {
     placeOrder,
     submitBargainOffer,
     currentUser,
+    pendingCheckoutTarget,
+    setPendingCheckoutTarget,
   } = useHarvestStore();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -62,11 +67,17 @@ export const MarketplacePortal: React.FC = () => {
     'COMPONENT_VIEW'
   );
 
-  // Bargain Modal State
-  const [bargainTargetBoard, setBargainTargetBoard] = useState<DonorBoard | null>(null);
+  // Scoped Bargain Modal State (tracks whether bargaining on a single Component or whole Board)
+  const [bargainTargetBoard, setBargainTargetBoard] = useState<DonorBoard | null>(
+    null
+  );
+  const [bargainTargetComponent, setBargainTargetComponent] =
+    useState<HarvestableComponent | null>(null);
   const [bargainOfferAmount, setBargainOfferAmount] = useState<number>(0);
   const [bargainNote, setBargainNote] = useState<string>('');
-  const [bargainSuccessMsg, setBargainSuccessMsg] = useState<string | null>(null);
+  const [bargainSuccessMsg, setBargainSuccessMsg] = useState<string | null>(
+    null
+  );
 
   // Bulk Component Cart state
   const [bulkCartIds, setBulkCartIds] = useState<string[]>([]);
@@ -78,7 +89,9 @@ export const MarketplacePortal: React.FC = () => {
     currentUser.fullName || 'Laptop Service Lab'
   );
   const [bulkBuyerPhone, setBulkBuyerPhone] = useState(
-    currentUser.phone ? currentUser.phone.replace(/\D/g, '').slice(-10) : '9840012345'
+    currentUser.phone
+      ? currentUser.phone.replace(/\D/g, '').slice(-10)
+      : '9840012345'
   );
   const [bulkBuyerAddress, setBulkBuyerAddress] = useState(
     currentUser.defaultAddress || 'Shop #14, Ritchie Street, Chennai'
@@ -120,6 +133,28 @@ export const MarketplacePortal: React.FC = () => {
     return map;
   }, [boards]);
 
+  // Automatically open InspectionCheckoutModal if redirected from an Accepted Bargain in OrdersTrackerPortal
+  useEffect(() => {
+    if (!pendingCheckoutTarget) return;
+    const targetBoard = boardMap.get(pendingCheckoutTarget.boardId);
+    if (targetBoard) {
+      const targetComp = pendingCheckoutTarget.componentId
+        ? components.find((c) => c.id === pendingCheckoutTarget.componentId) ||
+          null
+        : components.find(
+            (c) => c.donorBoardId === targetBoard.id && c.status === 'INTACT'
+          ) || null;
+      setModalTarget({
+        board: targetBoard,
+        component: targetComp,
+        mode: pendingCheckoutTarget.mode,
+      });
+    }
+    setPendingCheckoutTarget(null);
+  }, [pendingCheckoutTarget, boardMap, components, setPendingCheckoutTarget]);
+
+  const userDistrict = currentUser.district || 'Chennai';
+
   // Filtered intact components for Component View
   const filteredComponents = useMemo(() => {
     return components.filter((comp) => {
@@ -138,7 +173,8 @@ export const MarketplacePortal: React.FC = () => {
         return false;
       }
 
-      if (hyperlocalOnly && parent.distanceKm >= 15) {
+      const effectiveKm = computeEffectiveDistanceKm(parent, userDistrict);
+      if (hyperlocalOnly && effectiveKm >= 15) {
         return false;
       }
 
@@ -163,6 +199,7 @@ export const MarketplacePortal: React.FC = () => {
     selectedDifficulty,
     hyperlocalOnly,
     searchQuery,
+    userDistrict,
   ]);
 
   // Filtered boards for Donor Board View
@@ -171,7 +208,8 @@ export const MarketplacePortal: React.FC = () => {
       if (selectedCategory !== 'ALL' && board.category !== selectedCategory) {
         return false;
       }
-      if (hyperlocalOnly && board.distanceKm >= 15) {
+      const effectiveKm = computeEffectiveDistanceKm(board, userDistrict);
+      if (hyperlocalOnly && effectiveKm >= 15) {
         return false;
       }
       const boardChildren = components.filter(
@@ -205,6 +243,7 @@ export const MarketplacePortal: React.FC = () => {
     selectedDifficulty,
     hyperlocalOnly,
     searchQuery,
+    userDistrict,
   ]);
 
   const categoryOptions: { id: BoardCategory | 'ALL'; label: string }[] = [
@@ -222,7 +261,9 @@ export const MarketplacePortal: React.FC = () => {
     { id: 'ALL', label: 'All Tiers' },
     { id: 'LEVEL_1_PLUG_PULL', label: '🟢 Plug & Pull' },
     { id: 'LEVEL_2_BASIC_IRON', label: '🟡 Basic Iron' },
+    { id: 'LEVEL_2_THROUGH_HOLE', label: '🟠 Through-Hole' },
     { id: 'LEVEL_3_HOT_AIR_SMD', label: '🔴 Hot-Air SMD' },
+    { id: 'LEVEL_4_BGA_REWORK', label: '🟣 BGA Rework' },
   ];
 
   const renderDifficultyBadge = (difficulty: ExtractionDifficulty) => {
@@ -239,21 +280,50 @@ export const MarketplacePortal: React.FC = () => {
             🟡 Basic Iron
           </span>
         );
+      case 'LEVEL_2_THROUGH_HOLE':
+        return (
+          <span className="font-mono text-[11px] font-medium px-2.5 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-200">
+            🟠 Through-Hole
+          </span>
+        );
       case 'LEVEL_3_HOT_AIR_SMD':
         return (
           <span className="font-mono text-[11px] font-medium px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
             🔴 Hot-Air SMD
           </span>
         );
+      case 'LEVEL_4_BGA_REWORK':
+        return (
+          <span className="font-mono text-[11px] font-medium px-2.5 py-1 rounded-full bg-slate-900 text-amber-300 border border-slate-700">
+            🟣 BGA Rework
+          </span>
+        );
     }
   };
+
+  const bargainOriginalPrice = bargainTargetComponent
+    ? bargainTargetComponent.partPriceInr
+    : bargainTargetBoard?.rawBoardPriceInr ?? 100;
+
+  const bargainMinPrice = Math.max(10, Math.round(bargainOriginalPrice * 0.4));
 
   const handleBargainSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!bargainTargetBoard) return;
+
+    const isComponentBargain = Boolean(bargainTargetComponent);
+    const targetDisplayName = bargainTargetComponent
+      ? `${bargainTargetComponent.partNumber} (${bargainTargetBoard.boardName})`
+      : bargainTargetBoard.boardName;
+
     submitBargainOffer({
       boardId: bargainTargetBoard.id,
-      boardName: bargainTargetBoard.boardName,
+      componentId: bargainTargetComponent?.id ?? null,
+      targetType: isComponentBargain ? 'COMPONENT' : 'BOARD',
+      targetId: bargainTargetComponent
+        ? bargainTargetComponent.id
+        : bargainTargetBoard.id,
+      boardName: targetDisplayName,
       buyerId: currentUser.id,
       buyerName: currentUser.fullName || 'Verified Buyer',
       buyerPhone: currentUser.phone || '+91 98401 23456',
@@ -261,81 +331,59 @@ export const MarketplacePortal: React.FC = () => {
       sellerName: bargainTargetBoard.sellerName,
       sellerPhone: bargainTargetBoard.sellerPhone || '+91 98401 23456',
       sellerDistrict: bargainTargetBoard.sellerDistrict || 'Chennai',
-      originalPriceInr: bargainTargetBoard.rawBoardPriceInr,
+      originalPriceInr: bargainOriginalPrice,
       offeredPriceInr: bargainOfferAmount,
       note: bargainNote.trim(),
     });
-    setBargainSuccessMsg(`Bargain offer of ₹${bargainOfferAmount} submitted to ${bargainTargetBoard.sellerName}! You can track it under "My Orders & Bargains".`);
+    setBargainSuccessMsg(
+      `Bargain offer of ₹${bargainOfferAmount} for ${targetDisplayName} submitted to ${bargainTargetBoard.sellerName}! Track it under "My Orders & Bargains".`
+    );
     setTimeout(() => {
       setBargainSuccessMsg(null);
       setBargainTargetBoard(null);
+      setBargainTargetComponent(null);
     }, 3500);
   };
 
+  // Single-source-of-truth Bulk Cart breakdown
+  const bulkCartSummary = useMemo(() => {
+    return calculateBulkCartBreakdown({
+      components: bulkCartComponents,
+      boardMap,
+      buyerDistrict: bulkBuyerDistrict,
+      isProMember: Boolean(currentUser.isProMember),
+    });
+  }, [
+    bulkCartComponents,
+    boardMap,
+    bulkBuyerDistrict,
+    currentUser.isProMember,
+  ]);
+
   return (
     <div className="space-y-12">
-      {/* Recykal.Market Circular Economy Story & Action Bar */}
-      <section className="pt-4 pb-2 md:pt-6 text-center space-y-6">
-        <div className="rounded-3xl border border-slate-800 bg-[#0F172A] p-6 sm:p-10 text-white shadow-xl relative overflow-hidden text-left">
-          <div className="absolute inset-0 bg-radial-gradient from-emerald-500/10 via-transparent to-transparent pointer-events-none" />
-          <div className="relative z-10 max-w-4xl mx-auto space-y-4 text-center sm:text-left">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold uppercase tracking-wider">
-              <Sparkles className="w-3.5 h-3.5" />
-              Recykal-Standard Circular Electronics Marketplace
-            </div>
-            <h1 className="text-xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-white leading-[1.25]">
-              &ldquo;Valuable Components Get Lost the Moment They Stop Moving. SiliconHarvest Keeps Them Moving — Across One Connected, Traceable Network.&rdquo;
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-300 max-w-2xl">
-              India&apos;s verified circular network for ICs, washing machine &amp; appliance parts, battery packs, and donor motherboards with same-district 45-min dispatch.
-            </p>
-
-            {/* 4-Pillar Action Bar */}
-            <div className="pt-3 grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 text-left">
-              <div
-                onClick={() => setActiveTab('SELLER_PORTAL')}
-                className="cursor-pointer rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 p-3.5 active:scale-95 transition-all shadow-sm"
-              >
-                <div className="text-[11px] font-black uppercase tracking-wider text-emerald-400">1. SELL SPARES</div>
-                <div className="text-xs font-bold text-white mt-1">List in 30 Seconds →</div>
-                <div className="text-[11px] text-slate-400 mt-0.5">Automated fair pricing</div>
-              </div>
-
-              <div
-                onClick={() => {
-                  const el = document.getElementById('catalog-search-bar');
-                  el?.scrollIntoView({ behavior: 'smooth' });
-                }}
-                className="cursor-pointer rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 p-3.5 active:scale-95 transition-all shadow-sm"
-              >
-                <div className="text-[11px] font-black uppercase tracking-wider text-emerald-400">2. PROCURE PARTS</div>
-                <div className="text-xs font-bold text-white mt-1">Browse Catalog ↓</div>
-                <div className="text-[11px] text-slate-400 mt-0.5">Tested ICs &amp; boards</div>
-              </div>
-
-              <div
-                onClick={() => setActiveTab('MEMBERSHIP')}
-                className="cursor-pointer rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 p-3.5 active:scale-95 transition-all shadow-sm"
-              >
-                <div className="text-[11px] font-black uppercase tracking-wider text-amber-400">3. BARGAIN &amp; CONNECT</div>
-                <div className="text-xs font-bold text-white mt-1">Unlock WhatsApp ⭐</div>
-                <div className="text-[11px] text-slate-400 mt-0.5">Direct seller contact</div>
-              </div>
-
-              <div
-                onClick={() => setActiveTab('ORDERS_TRACKER')}
-                className="cursor-pointer rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 p-3.5 active:scale-95 transition-all shadow-sm"
-              >
-                <div className="text-[11px] font-black uppercase tracking-wider text-emerald-400">4. TRACK DISPATCH</div>
-                <div className="text-xs font-bold text-white mt-1">Live Courier Status →</div>
-                <div className="text-[11px] text-slate-400 mt-0.5">Rapido &amp; India Post</div>
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* Interactive 3D Hardware Hero Stage & 4-Pillar Action Console */}
+      <section className="pt-2 pb-2 md:pt-4 space-y-6">
+        <Hardware3DStage
+          activeBoardsCount={boards.length}
+          intactComponentsCount={
+            components.filter((c) => c.status === 'INTACT').length
+          }
+          onSelectPillar={(pillar) => {
+            if (pillar === 'SELL') setActiveTab('SELLER_PORTAL');
+            else if (pillar === 'PROCURE') {
+              const el = document.getElementById('catalog-search-bar');
+              el?.scrollIntoView({ behavior: 'smooth' });
+            } else if (pillar === 'BARGAIN') setActiveTab('MEMBERSHIP');
+            else if (pillar === 'TRACK') setActiveTab('ORDERS_TRACKER');
+          }}
+        />
 
         {/* Floating Frosted Glass Search & Filter Console */}
-        <div id="catalog-search-bar" className="max-w-4xl mx-auto pt-2 space-y-3 sm:space-y-4">
+        <div
+          id="catalog-search-bar"
+          className="max-w-4xl mx-auto pt-2 space-y-3 sm:space-y-4 text-center"
+        >
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             {/* Search Input (16px on mobile prevents auto-zoom) */}
             <div className="relative flex-1">
@@ -345,7 +393,7 @@ export const MarketplacePortal: React.FC = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search IC part number, package, or board..."
-                className="w-full pl-11 pr-20 py-3 sm:py-3.5 min-h-[44px] rounded-full bg-white/90 backdrop-blur-2xl border border-slate-200 hover:border-slate-300 text-base sm:text-sm text-[#1D1D1F] placeholder:text-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                className="w-full pl-11 pr-20 py-3 sm:py-3.5 min-h-[44px] rounded-full bg-white/90 backdrop-blur-2xl border border-slate-200 hover:border-slate-300 text-base sm:text-sm text-[#0F172A] placeholder:text-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
               />
               {searchQuery && (
                 <button
@@ -363,8 +411,8 @@ export const MarketplacePortal: React.FC = () => {
                 onClick={() => setViewMode('COMPONENT_VIEW')}
                 className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 min-h-[40px] rounded-full text-xs font-medium active:scale-95 transition-all ${
                   viewMode === 'COMPONENT_VIEW'
-                    ? 'bg-[#1D1D1F] text-white font-semibold shadow-sm'
-                    : 'text-slate-600 hover:text-[#1D1D1F]'
+                    ? 'bg-[#0F172A] text-white font-semibold shadow-sm'
+                    : 'text-slate-600 hover:text-[#0F172A]'
                 }`}
               >
                 <Cpu className="w-3.5 h-3.5" />
@@ -374,8 +422,8 @@ export const MarketplacePortal: React.FC = () => {
                 onClick={() => setViewMode('BOARD_VIEW')}
                 className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 min-h-[40px] rounded-full text-xs font-medium active:scale-95 transition-all ${
                   viewMode === 'BOARD_VIEW'
-                    ? 'bg-[#1D1D1F] text-white font-semibold shadow-sm'
-                    : 'text-slate-600 hover:text-[#1D1D1F]'
+                    ? 'bg-[#0F172A] text-white font-semibold shadow-sm'
+                    : 'text-slate-600 hover:text-[#0F172A]'
                 }`}
               >
                 <Layers className="w-3.5 h-3.5" />
@@ -394,8 +442,8 @@ export const MarketplacePortal: React.FC = () => {
                   onClick={() => setSelectedCategory(cat.id)}
                   className={`shrink-0 px-3.5 py-1.5 min-h-[38px] rounded-full text-xs font-medium whitespace-nowrap active:scale-95 transition-all ${
                     selectedCategory === cat.id
-                      ? 'bg-[#1D1D1F] text-white shadow-sm font-semibold'
-                      : 'bg-white/80 border border-slate-200/80 text-slate-600 hover:text-[#1D1D1F]'
+                      ? 'bg-[#0F172A] text-white shadow-sm font-semibold'
+                      : 'bg-white/80 border border-slate-200/80 text-slate-600 hover:text-[#0F172A]'
                   }`}
                 >
                   {cat.label}
@@ -411,8 +459,8 @@ export const MarketplacePortal: React.FC = () => {
                   onClick={() => setSelectedDifficulty(tier.id)}
                   className={`shrink-0 px-3.5 py-1.5 min-h-[38px] rounded-full text-xs font-medium whitespace-nowrap active:scale-95 transition-all ${
                     selectedDifficulty === tier.id
-                      ? 'bg-[#1D1D1F] text-white shadow-sm font-semibold'
-                      : 'bg-white/80 border border-slate-200/80 text-slate-600 hover:text-[#1D1D1F]'
+                      ? 'bg-[#0F172A] text-white shadow-sm font-semibold'
+                      : 'bg-white/80 border border-slate-200/80 text-slate-600 hover:text-[#0F172A]'
                   }`}
                 >
                   {tier.label}
@@ -424,7 +472,7 @@ export const MarketplacePortal: React.FC = () => {
                 className={`shrink-0 flex items-center gap-1.5 px-3.5 py-1.5 min-h-[38px] rounded-full text-xs font-medium whitespace-nowrap active:scale-95 transition-all ${
                   hyperlocalOnly
                     ? 'bg-emerald-600 text-white font-semibold shadow-sm'
-                    : 'bg-white/80 border border-slate-200/80 text-slate-600 hover:text-[#1D1D1F]'
+                    : 'bg-white/80 border border-slate-200/80 text-slate-600 hover:text-[#0F172A]'
                 }`}
               >
                 <MapPin className="w-3.5 h-3.5" />
@@ -435,14 +483,14 @@ export const MarketplacePortal: React.FC = () => {
         </div>
       </section>
 
-      {/* VIEW 1: COMPONENT MARKETPLACE BENTO GRID */}
+      {/* VIEW 1: COMPONENT MARKETPLACE BENTO GRID (3D SPATIAL TILT CARDS) */}
       {viewMode === 'COMPONENT_VIEW' ? (
         filteredComponents.length === 0 ? (
           <div className="bg-white/90 backdrop-blur-2xl border border-slate-200/80 rounded-3xl p-16 text-center space-y-5 shadow-sm">
             <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center mx-auto">
               <Cpu className="w-7 h-7 text-emerald-600" />
             </div>
-            <h3 className="text-xl font-semibold tracking-tight text-[#1D1D1F]">
+            <h3 className="text-xl font-semibold tracking-tight text-[#0F172A] font-display">
               {boards.length === 0
                 ? 'No Donor Boards Listed Yet (0 Active Boards)'
                 : 'No Harvestable Components Match Your Filter'}
@@ -455,7 +503,7 @@ export const MarketplacePortal: React.FC = () => {
             <div className="pt-1">
               <button
                 onClick={() => setActiveTab('SELLER_PORTAL')}
-                className="px-6 py-3.5 rounded-2xl bg-[#1D1D1F] hover:bg-slate-800 text-white font-semibold text-xs sm:text-sm inline-flex items-center gap-2 transition-all shadow-sm"
+                className="px-6 py-3.5 rounded-2xl bg-[#0F172A] hover:bg-slate-800 text-white font-semibold text-xs sm:text-sm inline-flex items-center gap-2 transition-all shadow-sm"
               >
                 <PlusCircle className="w-4 h-4" />
                 <span>
@@ -472,18 +520,27 @@ export const MarketplacePortal: React.FC = () => {
               if (!parentBoard) return null;
 
               const isRawAvailable = parentBoard.status === 'AVAILABLE';
+              const isSolderedOnly = parentBoard.hardwareMode === 'SOLDERED_RAW';
+              const isReadyToUse = parentBoard.hardwareMode === 'READY_TO_USE';
+              const effectiveExtractionFee = isReadyToUse ? 0 : comp.extractionFeeInr;
+              const effectiveDistanceKm = computeEffectiveDistanceKm(
+                parentBoard,
+                userDistrict
+              );
 
               return (
-                <div
+                <Tilt3DCard
                   key={comp.id}
                   onClick={() =>
                     setModalTarget({
                       board: parentBoard,
                       component: comp,
-                      mode: 'EXTRACTED_TESTED_PART',
+                      mode: isSolderedOnly
+                        ? 'RAW_DONOR_BOARD'
+                        : 'EXTRACTED_TESTED_PART',
                     })
                   }
-                  className="group bg-white/90 backdrop-blur-2xl border border-slate-200/80 hover:border-slate-300 hover:-translate-y-1 hover:scale-[1.01] transition-all duration-300 rounded-3xl p-7 flex flex-col justify-between cursor-pointer shadow-[0_8px_30px_rgba(15,23,42,0.05)] hover:shadow-[0_16px_40px_rgba(15,23,42,0.09)]"
+                  className="group bg-white/95 backdrop-blur-2xl border border-slate-200/90 hover:border-emerald-400/70 rounded-3xl p-7 flex flex-col justify-between cursor-pointer shadow-[0_10px_35px_rgba(15,23,42,0.06)] hover:shadow-[0_20px_50px_rgba(15,23,42,0.12)]"
                 >
                   <div className="space-y-5">
                     {/* Clean Hardware Thumbnail Preview Header */}
@@ -510,7 +567,7 @@ export const MarketplacePortal: React.FC = () => {
                           <div className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">
                             {comp.componentCategory}
                           </div>
-                          <div className="font-mono text-lg font-bold text-[#1D1D1F] tracking-tight">
+                          <div className="font-mono text-lg font-bold text-[#0F172A] tracking-tight">
                             {comp.partNumber}
                           </div>
                         </div>
@@ -541,7 +598,7 @@ export const MarketplacePortal: React.FC = () => {
 
                     {/* Component Title & Donor Board Context Pill */}
                     <div className="space-y-2.5">
-                      <h3 className="text-base font-semibold text-[#1D1D1F] leading-snug">
+                      <h3 className="text-base font-semibold text-[#0F172A] leading-snug font-display">
                         {comp.partName}
                       </h3>
 
@@ -550,7 +607,7 @@ export const MarketplacePortal: React.FC = () => {
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
                         <span className="truncate">
                           Inside:{' '}
-                          <strong className="text-[#1D1D1F] font-medium">
+                          <strong className="text-[#0F172A] font-medium">
                             {parentBoard.boardName}
                           </strong>
                         </span>
@@ -561,19 +618,23 @@ export const MarketplacePortal: React.FC = () => {
                           <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                           <span className="truncate">
                             {parentBoard.sellerDistrict
-                              ? `${parentBoard.sellerDistrict}, ${parentBoard.sellerState || ''}`
+                              ? `${parentBoard.sellerDistrict}, ${
+                                  parentBoard.sellerState || ''
+                                }`
                               : parentBoard.locationArea}
                           </span>
                         </span>
                         <span className="font-mono text-xs text-slate-700 font-medium shrink-0 ml-2">
-                          {parentBoard.distanceKm} km
+                          {effectiveDistanceKm} km
                         </span>
                       </div>
 
                       {/* Seller & Verified Recycler Contact Block */}
                       <div className="pt-2 border-t border-slate-100 space-y-2">
                         <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-semibold text-slate-700 truncate">{parentBoard.sellerName}</span>
+                          <span className="font-semibold text-slate-700 truncate">
+                            {parentBoard.sellerName}
+                          </span>
                           {parentBoard.isVerified && (
                             <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                               <CheckCircle className="w-2.5 h-2.5" /> Verified
@@ -588,7 +649,15 @@ export const MarketplacePortal: React.FC = () => {
                               📞 {parentBoard.sellerPhone || '+91 98401 23456'}
                             </span>
                             <a
-                              href={`https://wa.me/91${(parentBoard.sellerPhone || '9840123456').replace(/\D/g, '').slice(-10)}?text=Hi%20${encodeURIComponent(parentBoard.sellerName)},%20interested%20in%20${encodeURIComponent(comp.partNumber)}%20from%20SiliconHarvest`}
+                              href={`https://wa.me/91${(
+                                parentBoard.sellerPhone || '9840123456'
+                              )
+                                .replace(/\D/g, '')
+                                .slice(-10)}?text=Hi%20${encodeURIComponent(
+                                parentBoard.sellerName
+                              )},%20interested%20in%20${encodeURIComponent(
+                                comp.partNumber
+                              )}%20from%20SiliconHarvest`}
                               target="_blank"
                               rel="noopener noreferrer"
                               onClick={(e) => e.stopPropagation()}
@@ -600,7 +669,9 @@ export const MarketplacePortal: React.FC = () => {
                           </div>
                         ) : (
                           <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-200 text-xs">
-                            <span className="font-mono text-slate-400 text-[11px]">📞 +91 9840X XXXXX</span>
+                            <span className="font-mono text-slate-400 text-[11px]">
+                              📞 +91 9840X XXXXX
+                            </span>
                             <button
                               type="button"
                               onClick={(e) => {
@@ -635,25 +706,29 @@ export const MarketplacePortal: React.FC = () => {
 
                   {/* Dual-Action Pricing Buttons */}
                   <div className="mt-6 pt-5 border-t border-slate-200/80 space-y-2.5">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setModalTarget({
-                          board: parentBoard,
-                          component: comp,
-                          mode: 'EXTRACTED_TESTED_PART',
-                        });
-                      }}
-                      className="w-full min-h-[44px] py-3 px-4 rounded-2xl bg-[#1D1D1F] hover:bg-slate-800 text-white font-medium text-xs flex items-center justify-between active:scale-95 transition-all shadow-sm"
-                    >
-                      <span className="flex items-center gap-1.5 font-semibold">
-                        <Flame className="w-3.5 h-3.5 text-amber-400" />
-                        Buy Extracted
-                      </span>
-                      <span className="font-mono font-semibold text-emerald-300">
-                        ₹{comp.partPriceInr} + ₹{comp.extractionFeeInr} fee
-                      </span>
-                    </button>
+                    {!isSolderedOnly && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setModalTarget({
+                            board: parentBoard,
+                            component: comp,
+                            mode: 'EXTRACTED_TESTED_PART',
+                          });
+                        }}
+                        className="w-full min-h-[44px] py-3 px-4 rounded-2xl bg-[#0F172A] hover:bg-slate-800 text-white font-medium text-xs flex items-center justify-between active:scale-95 transition-all shadow-sm"
+                      >
+                        <span className="flex items-center gap-1.5 font-semibold">
+                          <Flame className="w-3.5 h-3.5 text-amber-400" />
+                          {isReadyToUse ? 'Buy Ready-to-Use' : 'Buy Extracted'}
+                        </span>
+                        <span className="font-mono font-semibold text-emerald-300">
+                          {isReadyToUse
+                            ? `₹${comp.partPriceInr} (₹0 QC fee)`
+                            : `₹${comp.partPriceInr} + ₹${effectiveExtractionFee} fee`}
+                        </span>
+                      </button>
+                    )}
 
                     <button
                       disabled={!isRawAvailable}
@@ -667,13 +742,15 @@ export const MarketplacePortal: React.FC = () => {
                       }}
                       className={`w-full min-h-[44px] py-3 px-4 rounded-2xl text-xs flex items-center justify-between border transition-all ${
                         isRawAvailable
-                          ? 'bg-slate-100/80 hover:bg-slate-200/70 text-[#1D1D1F] border-slate-200/90 active:scale-95'
+                          ? isSolderedOnly
+                            ? 'bg-[#0F172A] hover:bg-slate-800 text-white border-slate-900 active:scale-95 font-semibold'
+                            : 'bg-slate-100/80 hover:bg-slate-200/70 text-[#0F172A] border-slate-200/90 active:scale-95'
                           : 'bg-slate-50 text-slate-400 border-slate-200/50 cursor-not-allowed'
                       }`}
                     >
                       <span className="flex items-center gap-1.5 font-medium">
                         {isRawAvailable ? (
-                          <Layers className="w-3.5 h-3.5 text-emerald-600" />
+                          <Layers className="w-3.5 h-3.5 text-emerald-500" />
                         ) : (
                           <Lock className="w-3.5 h-3.5 text-slate-400" />
                         )}
@@ -686,30 +763,32 @@ export const MarketplacePortal: React.FC = () => {
                       </span>
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleCartItem(comp.id);
-                      }}
-                      className={`w-full min-h-[44px] py-2.5 px-4 rounded-2xl text-xs font-medium flex items-center justify-center gap-1.5 border active:scale-95 transition-all ${
-                        bulkCartIds.includes(comp.id)
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold'
-                          : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
-                      }`}
-                    >
-                      {bulkCartIds.includes(comp.id) ? (
-                        <>
-                          <Check className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>In Bulk Cart (Click to Remove)</span>
-                        </>
-                      ) : (
-                        <>
-                          <ShoppingBag className="w-3.5 h-3.5 text-slate-500" />
-                          <span>+ Add to Bulk Component Cart</span>
-                        </>
-                      )}
-                    </button>
+                    {!isSolderedOnly && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleCartItem(comp.id);
+                        }}
+                        className={`w-full min-h-[44px] py-2.5 px-4 rounded-2xl text-xs font-medium flex items-center justify-center gap-1.5 border active:scale-95 transition-all ${
+                          bulkCartIds.includes(comp.id)
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold'
+                            : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
+                        }`}
+                      >
+                        {bulkCartIds.includes(comp.id) ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>In Bulk Cart (Click to Remove)</span>
+                          </>
+                        ) : (
+                          <>
+                            <ShoppingBag className="w-3.5 h-3.5 text-slate-500" />
+                            <span>+ Add to Bulk Component Cart</span>
+                          </>
+                        )}
+                      </button>
+                    )}
 
                     {parentBoard.allowBargain && (
                       <button
@@ -717,17 +796,33 @@ export const MarketplacePortal: React.FC = () => {
                         onClick={(e) => {
                           e.stopPropagation();
                           setBargainTargetBoard(parentBoard);
-                          setBargainOfferAmount(Math.max(10, Math.round(comp.partPriceInr * 0.85)));
-                          setBargainNote(`Inquiring about ${comp.partNumber}`);
+                          setBargainTargetComponent(
+                            isSolderedOnly ? null : comp
+                          );
+                          const basePrice = isSolderedOnly
+                            ? parentBoard.rawBoardPriceInr
+                            : comp.partPriceInr;
+                          setBargainOfferAmount(
+                            Math.max(10, Math.round(basePrice * 0.85))
+                          );
+                          setBargainNote(
+                            `Inquiring about ${comp.partNumber} (${parentBoard.boardName})`
+                          );
                         }}
                         className="w-full min-h-[40px] py-2 px-3 rounded-2xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-xs"
                       >
                         <TrendingDown className="w-3.5 h-3.5 text-amber-600" />
-                        <span>Bargain Price / Make Counter-Offer</span>
+                        <span>
+                          Bargain Price (₹
+                          {isSolderedOnly
+                            ? parentBoard.rawBoardPriceInr
+                            : comp.partPriceInr}
+                          )
+                        </span>
                       </button>
                     )}
                   </div>
-                </div>
+                </Tilt3DCard>
               );
             })}
           </div>
@@ -737,7 +832,7 @@ export const MarketplacePortal: React.FC = () => {
           <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center mx-auto">
             <Layers className="w-7 h-7 text-emerald-600" />
           </div>
-          <h3 className="text-xl font-semibold tracking-tight text-[#1D1D1F]">
+          <h3 className="text-xl font-semibold tracking-tight text-[#0F172A] font-display">
             {boards.length === 0
               ? 'No Donor Boards Listed Yet (0 Active Boards)'
               : 'No Donor Boards Match Your Filter'}
@@ -750,7 +845,7 @@ export const MarketplacePortal: React.FC = () => {
           <div className="pt-1">
             <button
               onClick={() => setActiveTab('SELLER_PORTAL')}
-              className="px-6 py-3.5 rounded-2xl bg-[#1D1D1F] hover:bg-slate-800 text-white font-semibold text-xs sm:text-sm inline-flex items-center gap-2 transition-all shadow-sm"
+              className="px-6 py-3.5 rounded-2xl bg-[#0F172A] hover:bg-slate-800 text-white font-semibold text-xs sm:text-sm inline-flex items-center gap-2 transition-all shadow-sm"
             >
               <PlusCircle className="w-4 h-4" />
               <span>
@@ -761,7 +856,7 @@ export const MarketplacePortal: React.FC = () => {
           </div>
         </div>
       ) : (
-        /* VIEW 2: DONOR BOARD BENTO GRID */
+        /* VIEW 2: DONOR BOARD BENTO GRID (3D SPATIAL TILT CARDS) */
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
           {filteredBoards.map((board) => {
             const childComps = components.filter(
@@ -772,9 +867,13 @@ export const MarketplacePortal: React.FC = () => {
             );
             const hasBypassHack = childComps.some((c) => c.bypassHackTip);
             const isRawAvailable = board.status === 'AVAILABLE';
+            const effectiveDistanceKm = computeEffectiveDistanceKm(
+              board,
+              userDistrict
+            );
 
             return (
-              <div
+              <Tilt3DCard
                 key={board.id}
                 onClick={() =>
                   setModalTarget({
@@ -785,7 +884,7 @@ export const MarketplacePortal: React.FC = () => {
                       : 'EXTRACTED_TESTED_PART',
                   })
                 }
-                className="bg-white/90 backdrop-blur-2xl border border-slate-200/80 hover:border-slate-300 hover:-translate-y-1 hover:scale-[1.01] rounded-3xl p-6 sm:p-8 flex flex-col justify-between transition-all duration-300 cursor-pointer shadow-[0_8px_30px_rgba(15,23,42,0.05)] hover:shadow-[0_16px_40px_rgba(15,23,42,0.09)]"
+                className="bg-white/95 backdrop-blur-2xl border border-slate-200/90 hover:border-emerald-400/70 rounded-3xl p-6 sm:p-8 flex flex-col justify-between cursor-pointer shadow-[0_10px_35px_rgba(15,23,42,0.06)] hover:shadow-[0_20px_50px_rgba(15,23,42,0.12)]"
               >
                 <div className="space-y-4">
                   {board.imageUrl && (
@@ -818,7 +917,7 @@ export const MarketplacePortal: React.FC = () => {
                           </span>
                         )}
                       </div>
-                      <h3 className="text-xl font-semibold text-[#1D1D1F] mt-2 tracking-tight">
+                      <h3 className="text-xl font-semibold text-[#0F172A] mt-2 tracking-tight font-display">
                         {board.boardName}
                       </h3>
                     </div>
@@ -879,9 +978,11 @@ export const MarketplacePortal: React.FC = () => {
                 </div>
 
                 {/* Seller & Verified Recycler Contact Block */}
-                <div className="pt-2 border-t border-slate-100 space-y-2">
+                <div className="pt-2 border-t border-slate-100 space-y-2 mt-4">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-slate-700">{board.sellerName}</span>
+                    <span className="font-semibold text-slate-700">
+                      {board.sellerName}
+                    </span>
                     {board.isVerified && (
                       <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 text-[11px]">
                         <CheckCircle className="w-2.5 h-2.5" /> Verified Recycler
@@ -895,7 +996,15 @@ export const MarketplacePortal: React.FC = () => {
                         📞 {board.sellerPhone || '+91 98401 23456'}
                       </span>
                       <a
-                        href={`https://wa.me/91${(board.sellerPhone || '9840123456').replace(/\D/g, '').slice(-10)}?text=Hi%20${encodeURIComponent(board.sellerName)},%20interested%20in%20${encodeURIComponent(board.boardName)}%20from%20SiliconHarvest`}
+                        href={`https://wa.me/91${(
+                          board.sellerPhone || '9840123456'
+                        )
+                          .replace(/\D/g, '')
+                          .slice(-10)}?text=Hi%20${encodeURIComponent(
+                          board.sellerName
+                        )},%20interested%20in%20${encodeURIComponent(
+                          board.boardName
+                        )}%20from%20SiliconHarvest`}
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
@@ -907,7 +1016,9 @@ export const MarketplacePortal: React.FC = () => {
                     </div>
                   ) : (
                     <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
-                      <span className="font-mono text-slate-400 text-xs">📞 +91 9840X XXXXX</span>
+                      <span className="font-mono text-slate-400 text-xs">
+                        📞 +91 9840X XXXXX
+                      </span>
                       <button
                         type="button"
                         onClick={(e) => {
@@ -933,7 +1044,7 @@ export const MarketplacePortal: React.FC = () => {
                         : board.locationArea}
                     </span>
                     <span className="font-mono text-slate-800 font-medium">
-                      ({board.distanceKm} km)
+                      ({effectiveDistanceKm} km)
                     </span>
                   </div>
 
@@ -944,8 +1055,13 @@ export const MarketplacePortal: React.FC = () => {
                         onClick={(e) => {
                           e.stopPropagation();
                           setBargainTargetBoard(board);
-                          setBargainOfferAmount(Math.round(board.rawBoardPriceInr * 0.85));
-                          setBargainNote(`Proposing bargain on ${board.boardName}`);
+                          setBargainTargetComponent(null);
+                          setBargainOfferAmount(
+                            Math.max(10, Math.round(board.rawBoardPriceInr * 0.85))
+                          );
+                          setBargainNote(
+                            `Proposing bargain on ${board.boardName}`
+                          );
                         }}
                         className="min-h-[44px] px-3.5 py-2 rounded-full border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all"
                       >
@@ -960,10 +1076,13 @@ export const MarketplacePortal: React.FC = () => {
                         setModalTarget({
                           board,
                           component: intactChildComps[0] || null,
-                          mode: 'EXTRACTED_TESTED_PART',
+                          mode:
+                            board.hardwareMode === 'SOLDERED_RAW'
+                              ? 'RAW_DONOR_BOARD'
+                              : 'EXTRACTED_TESTED_PART',
                         });
                       }}
-                      className="flex-1 sm:flex-none min-h-[44px] px-4 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200 text-[#1D1D1F] border border-slate-200 text-xs font-medium flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+                      className="flex-1 sm:flex-none min-h-[44px] px-4 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200 text-[#0F172A] border border-slate-200 text-xs font-medium flex items-center justify-center gap-1.5 active:scale-95 transition-all"
                     >
                       <Eye className="w-3.5 h-3.5 text-emerald-600" />
                       <span>Inspect PCB Map</span>
@@ -981,7 +1100,7 @@ export const MarketplacePortal: React.FC = () => {
                       }}
                       className={`flex-1 sm:flex-none min-h-[44px] px-4 py-2.5 rounded-full font-mono text-xs font-semibold active:scale-95 transition-all ${
                         isRawAvailable
-                          ? 'bg-[#1D1D1F] hover:bg-slate-800 text-white'
+                          ? 'bg-[#0F172A] hover:bg-slate-800 text-white'
                           : 'bg-slate-100 text-slate-400 cursor-not-allowed'
                       }`}
                     >
@@ -991,7 +1110,7 @@ export const MarketplacePortal: React.FC = () => {
                     </button>
                   </div>
                 </div>
-              </div>
+              </Tilt3DCard>
             );
           })}
         </div>
@@ -1027,23 +1146,22 @@ export const MarketplacePortal: React.FC = () => {
 
       {/* Floating Bulk Salvage Cart Bar */}
       {bulkCartComponents.length > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-2xl bg-[#1D1D1F] text-white rounded-3xl p-4 sm:px-6 shadow-2xl border border-slate-700 flex flex-wrap items-center justify-between gap-4">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-2xl bg-[#0F172A] text-white rounded-3xl p-4 sm:px-6 shadow-2xl border border-slate-700 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-mono font-bold text-sm">
               {bulkCartComponents.length}
             </div>
             <div>
-              <div className="text-xs sm:text-sm font-semibold">
+              <div className="text-xs sm:text-sm font-semibold font-display">
                 Bulk Salvage Cart ({bulkCartComponents.length} ICs from{' '}
                 {new Set(bulkCartComponents.map((c) => c.donorBoardId)).size}{' '}
                 Donor Boards)
               </div>
               <div className="text-[11px] text-slate-300 font-mono">
-                Parts: ₹
-                {bulkCartComponents.reduce((s, c) => s + c.partPriceInr, 0)} +
-                Extraction: ₹
-                {bulkCartComponents.reduce((s, c) => s + c.extractionFeeInr, 0)}{' '}
-                + 10% Escrow Fee
+                Parts: ₹{bulkCartSummary.totalPartsInr} + QC: ₹
+                {bulkCartSummary.totalExtractionInr} + Fee: ₹
+                {bulkCartSummary.unifiedCommissionInr} + Shipping: ₹
+                {bulkCartSummary.bundledShippingInr}
               </div>
             </div>
           </div>
@@ -1059,9 +1177,9 @@ export const MarketplacePortal: React.FC = () => {
             <button
               type="button"
               onClick={() => setShowBulkCartModal(true)}
-              className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-[#1D1D1F] font-semibold text-xs transition-all"
+              className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-[#0F172A] font-semibold text-xs transition-all"
             >
-              Checkout Bulk Cart →
+              Checkout Bulk Cart (₹{bulkCartSummary.grandTotalInr}) →
             </button>
           </div>
         </div>
@@ -1072,34 +1190,6 @@ export const MarketplacePortal: React.FC = () => {
         const distinctBoardsCount = new Set(
           bulkCartComponents.map((c) => c.donorBoardId)
         ).size;
-        const totalPartsInr = bulkCartComponents.reduce(
-          (s, c) => s + c.partPriceInr,
-          0
-        );
-        const totalExtractionInr = bulkCartComponents.reduce(
-          (s, c) => s + c.extractionFeeInr,
-          0
-        );
-        const unifiedCommissionInr = Math.max(
-          10,
-          Math.round((totalPartsInr + totalExtractionInr) * 0.1)
-        );
-        const allSameDistrict = bulkCartComponents.every((c) => {
-          const b = boardMap.get(c.donorBoardId);
-          return (
-            (b?.sellerDistrict || 'Chennai').toLowerCase() ===
-            bulkBuyerDistrict.toLowerCase()
-          );
-        });
-        const bundledShippingInr = allSameDistrict ? 39 : 49;
-        const bundledLogisticsLabel = allSameDistrict
-          ? 'Rapido Local Bike Parcel (₹39 Bundled)'
-          : 'India Post Speed Post (₹49 Outstation Parcel)';
-        const grandTotalInr =
-          totalPartsInr +
-          totalExtractionInr +
-          unifiedCommissionInr +
-          bundledShippingInr;
 
         return (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-md overflow-hidden animate-in fade-in duration-200">
@@ -1107,13 +1197,13 @@ export const MarketplacePortal: React.FC = () => {
               <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto my-2 sm:hidden shrink-0" />
               <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-slate-100 bg-slate-50 shrink-0">
                 <div>
-                  <h3 className="text-base font-semibold text-[#1D1D1F]">
+                  <h3 className="text-base font-semibold text-[#0F172A] font-display">
                     Bulk Component Cart Checkout ({bulkCartComponents.length}{' '}
                     Parts)
                   </h3>
                   <p className="text-xs text-slate-500">
                     Bundled across {distinctBoardsCount} Donor Motherboards •
-                    Unified 10% Commission &amp; Single Shipping
+                    Single-Source Escrow &amp; Bundled Shipping
                   </p>
                 </div>
                 <button
@@ -1129,13 +1219,15 @@ export const MarketplacePortal: React.FC = () => {
                 <div className="space-y-2">
                   {bulkCartComponents.map((c) => {
                     const b = boardMap.get(c.donorBoardId);
+                    const effExt =
+                      b?.hardwareMode === 'READY_TO_USE' ? 0 : c.extractionFeeInr;
                     return (
                       <div
                         key={c.id}
                         className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs"
                       >
                         <div>
-                          <div className="font-mono font-bold text-[#1D1D1F]">
+                          <div className="font-mono font-bold text-[#0F172A]">
                             {c.partNumber} — {c.partName}
                           </div>
                           <div className="text-[11px] text-slate-500">
@@ -1144,7 +1236,7 @@ export const MarketplacePortal: React.FC = () => {
                         </div>
                         <div className="font-mono text-right">
                           <div className="font-semibold text-emerald-700">
-                            ₹{c.partPriceInr} + ₹{c.extractionFeeInr} fee
+                            ₹{c.partPriceInr} + ₹{effExt} fee
                           </div>
                         </div>
                       </div>
@@ -1161,7 +1253,7 @@ export const MarketplacePortal: React.FC = () => {
                       type="text"
                       value={bulkBuyerName}
                       onChange={(e) => setBulkBuyerName(e.target.value)}
-                      className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border border-slate-200 text-base sm:text-xs text-[#1D1D1F] focus:outline-none"
+                      className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border border-slate-200 text-base sm:text-xs text-[#0F172A] focus:outline-none"
                     />
                   </div>
                   <div>
@@ -1171,7 +1263,7 @@ export const MarketplacePortal: React.FC = () => {
                     <select
                       value={bulkBuyerDistrict}
                       onChange={(e) => setBulkBuyerDistrict(e.target.value)}
-                      className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border border-slate-200 text-base sm:text-xs font-medium text-[#1D1D1F] focus:outline-none"
+                      className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border border-slate-200 text-base sm:text-xs font-medium text-[#0F172A] focus:outline-none"
                     >
                       {(
                         INDIAN_STATES_DISTRICTS[0]?.districts || [
@@ -1193,28 +1285,33 @@ export const MarketplacePortal: React.FC = () => {
                     <span className="text-slate-600">
                       Combined Parts ({bulkCartComponents.length} ICs):
                     </span>
-                    <span>₹{totalPartsInr}</span>
+                    <span>₹{bulkCartSummary.totalPartsInr}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-600">
                       Combined Hot-Air Extraction Escrow:
                     </span>
-                    <span>₹{totalExtractionInr}</span>
+                    <span>₹{bulkCartSummary.totalExtractionInr}</span>
                   </div>
                   <div className="flex justify-between text-emerald-700 font-semibold">
-                    <span>Unified 10% Platform Commission:</span>
-                    <span>₹{unifiedCommissionInr}</span>
+                    <span>
+                      Unified Platform Fee (
+                      {currentUser.isProMember ? 'Pro ⭐ ₹0 Free' : '5%'}):
+                    </span>
+                    <span>₹{bulkCartSummary.unifiedCommissionInr}</span>
                   </div>
                   <div className="flex justify-between text-sky-700">
                     <span className="flex items-center gap-1">
                       <Truck className="w-3.5 h-3.5" />
-                      {bundledLogisticsLabel}:
+                      {bulkCartSummary.bundledLogisticsLabel}:
                     </span>
-                    <span>₹{bundledShippingInr}</span>
+                    <span>₹{bulkCartSummary.bundledShippingInr}</span>
                   </div>
-                  <div className="pt-2 border-t border-slate-200 flex justify-between text-sm font-bold text-[#1D1D1F]">
+                  <div className="pt-2 border-t border-slate-200 flex justify-between text-sm font-bold text-[#0F172A]">
                     <span>Total Bundled Payable:</span>
-                    <span className="text-emerald-700">₹{grandTotalInr}</span>
+                    <span className="text-emerald-700">
+                      ₹{bulkCartSummary.grandTotalInr}
+                    </span>
                   </div>
                 </div>
 
@@ -1222,6 +1319,15 @@ export const MarketplacePortal: React.FC = () => {
                   type="button"
                   onClick={() => {
                     bulkCartComponents.forEach((c, idx) => {
+                      const b = boardMap.get(c.donorBoardId);
+                      const effExt =
+                        b?.hardwareMode === 'READY_TO_USE'
+                          ? 0
+                          : c.extractionFeeInr;
+                      const itemComm =
+                        idx === 0 ? bulkCartSummary.unifiedCommissionInr : 0;
+                      const itemShip =
+                        idx === 0 ? bulkCartSummary.bundledShippingInr : 0;
                       placeOrder({
                         buyerName: bulkBuyerName || 'Laptop Shop Owner',
                         buyerPhone: bulkBuyerPhone || '9840012345',
@@ -1232,13 +1338,13 @@ export const MarketplacePortal: React.FC = () => {
                         donorBoardId: c.donorBoardId,
                         componentId: c.id,
                         mode: 'EXTRACTED_TESTED_PART',
-                        deliveryType: allSameDistrict
+                        deliveryType: bulkCartSummary.allSameDistrict
                           ? 'HYPERLOCAL_RAPIDO'
                           : 'OUTSTATION_PARCEL',
-                        logisticsPartner: bundledLogisticsLabel,
-                        platformCommissionInr:
-                          idx === 0 ? unifiedCommissionInr : 0,
-                        deliveryFeeInr: idx === 0 ? bundledShippingInr : 0,
+                        logisticsPartner: bulkCartSummary.bundledLogisticsLabel,
+                        platformCommissionInr: itemComm,
+                        deliveryFeeInr: itemShip,
+                        totalPriceInr: c.partPriceInr + effExt + itemComm + itemShip,
                         upiUtrOrPaymentId: bulkUtr || '429104829104',
                       });
                     });
@@ -1246,16 +1352,17 @@ export const MarketplacePortal: React.FC = () => {
                     setShowBulkCartModal(false);
                     setActiveTab('ORDERS_TRACKER');
                   }}
-                  className="w-full min-h-[48px] py-3 rounded-2xl bg-[#1D1D1F] hover:bg-slate-800 text-white font-semibold text-xs active:scale-95 transition-all"
+                  className="w-full min-h-[48px] py-3 rounded-2xl bg-[#0F172A] hover:bg-slate-800 text-white font-semibold text-xs active:scale-95 transition-all"
                 >
-                  Confirm Bulk Cart Order (₹{grandTotalInr}) →
+                  Confirm Bulk Cart Order (₹{bulkCartSummary.grandTotalInr}) →
                 </button>
               </div>
             </div>
           </div>
         );
       })()}
-      {/* Interactive Bargain & Counter-Offer Modal */}
+
+      {/* Interactive Scoped Bargain & Counter-Offer Modal */}
       {bargainTargetBoard && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
           <div className="relative w-full max-w-lg rounded-3xl bg-white p-6 sm:p-8 shadow-2xl border border-slate-200 space-y-5 animate-scaleUp">
@@ -1263,6 +1370,7 @@ export const MarketplacePortal: React.FC = () => {
               type="button"
               onClick={() => {
                 setBargainTargetBoard(null);
+                setBargainTargetComponent(null);
                 setBargainSuccessMsg(null);
               }}
               className="absolute top-5 right-5 p-2 rounded-full text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 transition-all"
@@ -1273,11 +1381,21 @@ export const MarketplacePortal: React.FC = () => {
             <div>
               <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800 border border-amber-300">
                 <Crown className="w-3.5 h-3.5 text-amber-600" />
-                Recykal Pro Bargain Engine
+                Scoped Hardware Bargain Engine (
+                {bargainTargetComponent ? 'Component Offer' : 'Full Board Offer'})
               </div>
-              <h3 className="mt-2 text-xl font-black text-slate-900">Make an Offer / Propose Discount</h3>
+              <h3 className="mt-2 text-xl font-black text-slate-900 font-display">
+                Make an Offer / Propose Discount
+              </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Negotiate directly with <strong>{bargainTargetBoard.sellerName}</strong> for <strong>{bargainTargetBoard.boardName}</strong>.
+                Negotiate directly with{' '}
+                <strong>{bargainTargetBoard.sellerName}</strong> for{' '}
+                <strong>
+                  {bargainTargetComponent
+                    ? `${bargainTargetComponent.partNumber} (${bargainTargetComponent.partName})`
+                    : bargainTargetBoard.boardName}
+                </strong>
+                .
               </p>
             </div>
 
@@ -1288,6 +1406,7 @@ export const MarketplacePortal: React.FC = () => {
                   type="button"
                   onClick={() => {
                     setBargainTargetBoard(null);
+                    setBargainTargetComponent(null);
                     setBargainSuccessMsg(null);
                     setActiveTab('ORDERS_TRACKER');
                   }}
@@ -1300,36 +1419,58 @@ export const MarketplacePortal: React.FC = () => {
               <form onSubmit={handleBargainSubmit} className="space-y-4">
                 <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
                   <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-500">Listed Price:</span>
-                    <span className="font-mono line-through text-slate-400">₹{bargainTargetBoard.rawBoardPriceInr}</span>
+                    <span className="text-slate-500">
+                      Listed{' '}
+                      {bargainTargetComponent ? 'Component' : 'Raw Board'} Price:
+                    </span>
+                    <span className="font-mono line-through text-slate-400">
+                      ₹{bargainOriginalPrice}
+                    </span>
                   </div>
 
                   <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-slate-800">Your Proposed Counter-Price:</span>
-                    <span className="text-2xl font-black text-emerald-600">₹{bargainOfferAmount}</span>
+                    <span className="text-xs font-bold text-slate-800">
+                      Your Proposed Counter-Price:
+                    </span>
+                    <span className="text-2xl font-black text-emerald-600 font-mono">
+                      ₹{bargainOfferAmount}
+                    </span>
                   </div>
 
                   <input
                     type="range"
-                    min={Math.round(bargainTargetBoard.rawBoardPriceInr * 0.4)}
-                    max={bargainTargetBoard.rawBoardPriceInr}
-                    step={5}
+                    min={bargainMinPrice}
+                    max={bargainOriginalPrice}
+                    step={1}
                     value={bargainOfferAmount}
-                    onChange={(e) => setBargainOfferAmount(Number(e.target.value))}
+                    onChange={(e) =>
+                      setBargainOfferAmount(Number(e.target.value))
+                    }
                     className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
                   />
 
                   <div className="flex justify-between text-[11px] font-mono text-slate-400">
-                    <span>Min: ₹{Math.round(bargainTargetBoard.rawBoardPriceInr * 0.4)}</span>
+                    <span>Min: ₹{bargainMinPrice}</span>
                     <span className="text-emerald-700 font-bold">
-                      Discount: {Math.round(((bargainTargetBoard.rawBoardPriceInr - bargainOfferAmount) / bargainTargetBoard.rawBoardPriceInr) * 100)}% Off
+                      Discount:{' '}
+                      {Math.max(
+                        0,
+                        Math.round(
+                          ((bargainOriginalPrice - bargainOfferAmount) /
+                            bargainOriginalPrice) *
+                            100
+                        )
+                      )}
+                      % Off
                     </span>
-                    <span>Max: ₹{bargainTargetBoard.rawBoardPriceInr}</span>
+                    <span>Max: ₹{bargainOriginalPrice}</span>
                   </div>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700 block">Note for Seller (Optional):</label>
+                  <label className="text-xs font-bold text-slate-700 block">
+                    Note for Seller (Optional):
+                  </label>
                   <input
                     type="text"
                     value={bargainNote}
@@ -1343,7 +1484,9 @@ export const MarketplacePortal: React.FC = () => {
                   <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 flex items-start gap-2">
                     <Crown className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                     <span>
-                      Tip: Pro Members get instant counter-offer notifications and ₹0 convenience fee at checkout. You can still test this offer!
+                      Tip: Pro Members get instant counter-offer notifications
+                      and ₹0 convenience fee at checkout. You can still test
+                      this offer!
                     </span>
                   </div>
                 )}
@@ -1351,7 +1494,10 @@ export const MarketplacePortal: React.FC = () => {
                 <div className="flex items-center gap-3 pt-2">
                   <button
                     type="button"
-                    onClick={() => setBargainTargetBoard(null)}
+                    onClick={() => {
+                      setBargainTargetBoard(null);
+                      setBargainTargetComponent(null);
+                    }}
                     className="flex-1 min-h-[44px] py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50"
                   >
                     Cancel

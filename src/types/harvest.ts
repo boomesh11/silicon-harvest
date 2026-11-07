@@ -108,6 +108,7 @@ export interface Order {
   buyerState?: string;
   buyerDistrict?: string;
   buyerPincode?: string;
+  sellerDistrict?: string;
   donorBoardId: string;
   componentId: string | null;
   mode: OrderMode;
@@ -126,12 +127,16 @@ export interface Order {
   paymentUtr?: string;
   isProOrder?: boolean;
   bargainDiscountInr?: number;
+  redeemedBargainId?: string;
   createdAt: string;
 }
 
 export interface BargainOffer {
   id: string;
   boardId: string;
+  componentId?: string | null;
+  targetType?: 'BOARD' | 'COMPONENT';
+  targetId?: string;
   boardName: string;
   buyerId: string;
   buyerName: string;
@@ -143,7 +148,7 @@ export interface BargainOffer {
   originalPriceInr: number;
   offeredPriceInr: number;
   note?: string;
-  status: 'PENDING' | 'ACCEPTED' | 'REJECTED';
+  status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'REDEEMED';
   createdAt: string;
 }
 
