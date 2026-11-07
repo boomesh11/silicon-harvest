@@ -54,12 +54,19 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
     }
   );
 
-  const isRawDisabled = board.status !== 'AVAILABLE';
+  const isOwnListing = Boolean(
+    board.sellerId && board.sellerId === currentUser.id
+  );
+  const isReadyToUseModule = board.hardwareMode === 'READY_TO_USE';
+  const isRawDisabled =
+    board.status !== 'AVAILABLE' || board.hardwareMode === 'READY_TO_USE';
   const isExtractedDisabled =
     board.hardwareMode === 'SOLDERED_RAW' || intactComponents.length === 0;
-  const isReadyToUseModule = board.hardwareMode === 'READY_TO_USE';
 
   const [mode, setMode] = useState<OrderMode>(() => {
+    if (board.hardwareMode === 'READY_TO_USE') {
+      return 'EXTRACTED_TESTED_PART';
+    }
     if (board.hardwareMode === 'SOLDERED_RAW' && !isRawDisabled) {
       return 'RAW_DONOR_BOARD';
     }
@@ -205,6 +212,11 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
   const handleConfirmOrder = (e: React.FormEvent) => {
     e.preventDefault();
     setCheckoutError(null);
+
+    if (isOwnListing) {
+      setCheckoutError('Self-Purchase Guard: You cannot purchase your own listing.');
+      return;
+    }
 
     if (mode === 'EXTRACTED_TESTED_PART' && !selectedComp) {
       setCheckoutError('Please select a working component from the board health map.');
@@ -1129,13 +1141,27 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                   >
                     Cancel
                   </button>
-                  <button
-                    type="submit"
-                    className="w-full sm:w-auto min-h-[48px] px-8 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-500/10 active:scale-95 transition-all flex items-center justify-center gap-2"
-                  >
-                    <span>Confirm &amp; Place Order (₹{totalPayableInr})</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
+                  {isOwnListing ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        setActiveTab('SELLER_PORTAL');
+                      }}
+                      className="w-full sm:w-auto min-h-[48px] px-6 py-3 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 text-xs font-bold active:scale-95 transition-all flex items-center justify-center gap-2"
+                    >
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span>Your Listing • Manage in Seller Hub</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      className="w-full sm:w-auto min-h-[48px] px-8 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-500/10 active:scale-95 transition-all flex items-center justify-center gap-2"
+                    >
+                      <span>Confirm &amp; Place Order (₹{totalPayableInr})</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </form>
             </>

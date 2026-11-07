@@ -168,10 +168,23 @@ export interface PlaceOrderPayload {
   totalPriceInr?: number;
 }
 
+export interface PlaceBulkCartOrderPayload {
+  componentIds: string[];
+  buyerName: string;
+  buyerPhone: string;
+  buyerAddress: string;
+  buyerState?: string;
+  buyerDistrict?: string;
+  buyerPincode?: string;
+  upiUtrOrPaymentId?: string;
+}
+
 export interface NewBoardListingInput {
   boardName: string;
   category: BoardCategory;
   subModel?: string;
+  sellerId?: string;
+  sellerEmail?: string;
   sellerName: string;
   sellerPhone?: string;
   sellerState?: string;
@@ -248,10 +261,17 @@ interface HarvestStoreContextValue {
   disconnectSupabase: () => void;
   refreshFromSupabase: () => Promise<void>;
   placeOrder: (payload: PlaceOrderPayload) => Order;
+  placeBulkCartOrder: (payload: PlaceBulkCartOrderPayload) => Order[];
   publishDonorBoard: (input: NewBoardListingInput) => DonorBoard;
   submitBargainOffer: (offer: Omit<BargainOffer, 'id' | 'status' | 'createdAt'>) => BargainOffer;
   acceptBargainOffer: (offerId: string) => void;
   rejectBargainOffer: (offerId: string) => void;
+  cancelBargainOffer: (offerId: string) => void;
+  dispatchOrderBySeller: (
+    orderId: string,
+    trackingOrPorterLink: string,
+    targetStatus?: OrderStatus
+  ) => void;
   upgradeToProMembership: (plan: 'monthly' | 'yearly') => void;
   toggleUserProStatus: (userId?: string) => void;
   switchOwnerAdmin: () => void;
@@ -289,6 +309,31 @@ function loadFromStorage<T>(key: string, fallback: T): T {
     return JSON.parse(raw) as T;
   } catch {
     return fallback;
+  }
+}
+
+function safeSaveToStorage(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (err: any) {
+    // Handle QuotaExceededError gracefully by stripping large base64 data URIs on boards
+    if (
+      key === STORAGE_KEYS.BOARDS &&
+      Array.isArray(value)
+    ) {
+      try {
+        const trimmed = value.map((b: any) => ({
+          ...b,
+          imageUrl:
+            typeof b?.imageUrl === 'string' && b.imageUrl.startsWith('data:')
+              ? '/assets/3d/hero-pcb.png'
+              : b?.imageUrl,
+        }));
+        localStorage.setItem(key, JSON.stringify(trimmed));
+      } catch {
+        // Ignore if storage remains full
+      }
+    }
   }
 }
 
@@ -373,8 +418,10 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     const completedExtractions = orders.filter(
       (o) =>
         o.mode === 'EXTRACTED_TESTED_PART' &&
+        (o.extractionFeeInr ?? 0) > 0 &&
         (o.status === 'READY_FOR_DISPATCH' ||
           o.status === 'PICKED_UP_BY_PARTNER' ||
+          o.status === 'IN_TRANSIT' ||
           o.status === 'DELIVERED' ||
           o.status === 'COMPLETED')
     );
@@ -390,60 +437,36 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     };
   }, [orders]);
 
-  // Persist to localStorage
+  // Persist to localStorage using safeSaveToStorage (prevents QuotaExceededError crashes)
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEYS.BOARDS, JSON.stringify(boards));
-    } catch {
-      // ignore
-    }
+    safeSaveToStorage(STORAGE_KEYS.BOARDS, boards);
   }, [boards]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEYS.COMPONENTS, JSON.stringify(components));
-    } catch {
-      // ignore
-    }
+    safeSaveToStorage(STORAGE_KEYS.COMPONENTS, components);
   }, [components]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
-    } catch {
-      // ignore
-    }
+    safeSaveToStorage(STORAGE_KEYS.ORDERS, orders);
   }, [orders]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEYS.TICKETS, JSON.stringify(supportTickets));
-    } catch {
-      // ignore
-    }
+    safeSaveToStorage(STORAGE_KEYS.TICKETS, supportTickets);
   }, [supportTickets]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEYS.BARGAINS, JSON.stringify(bargainOffers));
-    } catch {
-      // ignore
-    }
+    safeSaveToStorage(STORAGE_KEYS.BARGAINS, bargainOffers);
   }, [bargainOffers]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEYS.PRO_OVERRIDES, JSON.stringify(proDirectoryOverrides));
-    } catch {
-      // ignore
-    }
+    safeSaveToStorage(STORAGE_KEYS.PRO_OVERRIDES, proDirectoryOverrides);
   }, [proDirectoryOverrides]);
 
   useEffect(() => {
+    safeSaveToStorage(STORAGE_KEYS.USER, currentUser);
     try {
-      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(currentUser));
       if (currentUser.id !== DEFAULT_GUEST_PROFILE.id && currentUser.email) {
-        localStorage.setItem(USER_SESSION_KEY, JSON.stringify(currentUser));
+        safeSaveToStorage(USER_SESSION_KEY, currentUser);
       } else {
         localStorage.removeItem(USER_SESSION_KEY);
       }
@@ -777,9 +800,33 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       throw new Error('Donor board not found');
     }
 
+    // 1. Self-Purchase Guard
+    if (
+      targetBoard.sellerId &&
+      targetBoard.sellerId === currentUser.id
+    ) {
+      throw new Error(
+        'Self-purchase guard: You cannot purchase your own listed product.'
+      );
+    }
+
     const targetComp = payload.componentId
       ? components.find((c) => c.id === payload.componentId) || null
       : null;
+
+    // 2. Inventory Availability Validation
+    if (payload.mode === 'RAW_DONOR_BOARD' && targetBoard.status !== 'AVAILABLE') {
+      throw new Error(
+        'This donor board is no longer available as a full raw board because one or more components were already harvested.'
+      );
+    }
+    if (
+      payload.mode === 'EXTRACTED_TESTED_PART' &&
+      targetComp &&
+      targetComp.status !== 'INTACT'
+    ) {
+      throw new Error('This component has already been sold.');
+    }
 
     const isPro = Boolean(payload.isProOrder ?? currentUser.isProMember);
     const isSameDistrict =
@@ -828,19 +875,35 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     );
     const orderCode = `SH-ORD-${orderNum}`;
 
+    // Context-aware lifecycle state machine:
+    // Only soldered components ordered as EXTRACTED_TESTED_PART enter PENDING_EXTRACTION.
+    // RAW_DONOR_BOARD and READY_TO_USE pre-desoldered spares skip workbench extraction and start at READY_FOR_DISPATCH.
+    const requiresHotAirExtraction =
+      payload.mode === 'EXTRACTED_TESTED_PART' &&
+      targetBoard.hardwareMode !== 'READY_TO_USE' &&
+      extractionFeeInr > 0;
+
     const newOrder: Order = {
       id: `ORD-${orderNum}`,
       orderCode,
+      buyerId: currentUser.id,
+      buyerEmail: currentUser.email,
       buyerName: payload.buyerName,
       buyerPhone: payload.buyerPhone,
       buyerAddress: payload.buyerAddress,
       buyerState: payload.buyerState || 'Tamil Nadu',
       buyerDistrict: payload.buyerDistrict || 'Chennai',
       buyerPincode: payload.buyerPincode || '600001',
+      sellerId: targetBoard.sellerId,
+      sellerEmail: targetBoard.sellerEmail,
+      sellerName: targetBoard.sellerName,
+      sellerPhone: targetBoard.sellerPhone,
       sellerDistrict: targetBoard.sellerDistrict || targetBoard.locationCity || 'Chennai',
       donorBoardId: payload.donorBoardId,
       componentId: payload.componentId,
+      componentIds: payload.componentId ? [payload.componentId] : [],
       mode: payload.mode,
+      hardwareMode: targetBoard.hardwareMode,
       deliveryType: payload.deliveryType,
       logisticsPartner: resolvedPartnerLabel,
       itemPriceInr,
@@ -852,13 +915,14 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       isProOrder: isPro,
       bargainDiscountInr,
       redeemedBargainId,
-      status:
-        payload.mode === 'RAW_DONOR_BOARD'
-          ? 'READY_FOR_DISPATCH'
-          : 'PENDING_EXTRACTION',
+      status: requiresHotAirExtraction
+        ? 'PENDING_EXTRACTION'
+        : 'READY_FOR_DISPATCH',
       multimeterReadingValue:
         payload.mode === 'RAW_DONOR_BOARD'
           ? 'As-Is Raw Donor Assembly (Bypass / Self-Salvage)'
+          : targetBoard.hardwareMode === 'READY_TO_USE'
+          ? 'Pre-Desoldered Ready-to-Use Spare (Verified)'
           : '',
       trackingOrPorterLink: '',
       upiUtrOrPaymentId: payload.upiUtrOrPaymentId || '',
@@ -866,14 +930,33 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       createdAt: new Date().toISOString(),
     };
 
-    // Single-use bargain invariant: immediately transition redeemed bargain to 'REDEEMED'
-    if (redeemedBargainId) {
-      setBargainOffers((prev) =>
-        prev.map((b) =>
-          b.id === redeemedBargainId ? { ...b, status: 'REDEEMED' } : b
-        )
-      );
-    }
+    // Single-use bargain invariant + Automatic Bargain Expiration for sold-out targets
+    setBargainOffers((prev) =>
+      prev.map((b) => {
+        if (redeemedBargainId && b.id === redeemedBargainId) {
+          return { ...b, status: 'REDEEMED' };
+        }
+        if (b.status !== 'PENDING' && b.status !== 'ACCEPTED') {
+          return b;
+        }
+        // If the entire board was bought raw, expire all remaining offers on this board and its parts
+        if (payload.mode === 'RAW_DONOR_BOARD' && b.boardId === payload.donorBoardId) {
+          return { ...b, status: 'EXPIRED' };
+        }
+        // If a specific component was bought, expire remaining offers on that component
+        // AND expire BOARD-level offers on the parent board (since the full raw board is now PARTIALLY_HARVESTED)
+        if (payload.mode === 'EXTRACTED_TESTED_PART' && b.boardId === payload.donorBoardId) {
+          if (
+            (payload.componentId && b.componentId === payload.componentId) ||
+            b.targetType === 'BOARD' ||
+            !b.componentId
+          ) {
+            return { ...b, status: 'EXPIRED' };
+          }
+        }
+        return b;
+      })
+    );
 
     // Optimistic Atomic Local Update
     if (payload.mode === 'RAW_DONOR_BOARD') {
@@ -892,20 +975,28 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         )
       );
     } else if (payload.componentId) {
-      setComponents((prev) =>
-        prev.map((c) =>
-          c.id === payload.componentId ? { ...c, status: 'EXTRACTED_SOLD' } : c
-        )
+      const updatedComps = components.map((c) =>
+        c.id === payload.componentId ? { ...c, status: 'EXTRACTED_SOLD' as const } : c
       );
+      setComponents(updatedComps);
+
+      const remainingIntactForBoard = updatedComps.filter(
+        (c) => c.donorBoardId === payload.donorBoardId && c.status === 'INTACT'
+      ).length;
+
       setBoards((prev) =>
         prev.map((b) => {
           if (b.id !== payload.donorBoardId) return b;
-          const nextIntact = Math.max(0, (b.intactComponentsCount ?? 1) - 1);
+          const totalCount =
+            b.totalComponentsCount ??
+            updatedComps.filter((c) => c.donorBoardId === b.id).length;
           return {
             ...b,
             status:
-              b.status === 'AVAILABLE' ? 'PARTIALLY_HARVESTED' : b.status,
-            intactComponentsCount: nextIntact,
+              remainingIntactForBoard < totalCount || b.status === 'AVAILABLE'
+                ? 'PARTIALLY_HARVESTED'
+                : b.status,
+            intactComponentsCount: remainingIntactForBoard,
           };
         })
       );
@@ -916,7 +1007,6 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
 
     syncCreateOrderBackend(newOrder).catch(() => undefined);
 
-    // If connected to Supabase Cloud, invoke the PostgreSQL Atomic RPC `place_salvage_order`
     if (connectionMode === 'SUPABASE_CLOUD') {
       supabasePlaceSalvageOrder({
         orderCode,
@@ -945,6 +1035,190 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     return newOrder;
   };
 
+  /**
+   * Atomic Multi-Item Bulk Cart Order Engine:
+   * 1. Validates every component is still INTACT and parent board is not SOLD_RAW or self-owned.
+   * 2. Atomically locks all purchased componentIds as EXTRACTED_SOLD.
+   * 3. Recalculates intactComponentsCount on each affected parent board and transitions status to PARTIALLY_HARVESTED.
+   * 4. Creates linked Order records so every part requiring hot-air extraction enters the Technician Workbench queue.
+   */
+  const placeBulkCartOrder = (payload: PlaceBulkCartOrderPayload): Order[] => {
+    const uniqueCompIds = Array.from(new Set(payload.componentIds));
+    if (uniqueCompIds.length === 0) {
+      throw new Error('Your bulk cart is empty.');
+    }
+
+    const boardMap = new Map(boards.map((b) => [b.id, b]));
+    const targetComps: HarvestableComponent[] = [];
+
+    for (const compId of uniqueCompIds) {
+      const comp = components.find((c) => c.id === compId);
+      if (!comp) {
+        throw new Error(`Component ${compId} no longer exists.`);
+      }
+      if (comp.status !== 'INTACT') {
+        throw new Error(
+          `Component ${comp.partNumber} (${comp.partName}) was already sold. Please remove it from your cart.`
+        );
+      }
+      const parentBoard = boardMap.get(comp.donorBoardId);
+      if (!parentBoard || parentBoard.status === 'SOLD_RAW') {
+        throw new Error(
+          `Donor board for ${comp.partNumber} is no longer available.`
+        );
+      }
+      if (parentBoard.sellerId && parentBoard.sellerId === currentUser.id) {
+        throw new Error(
+          `Self-purchase guard: You cannot purchase your own listing (${comp.partNumber}).`
+        );
+      }
+      targetComps.push(comp);
+    }
+
+    const isPro = Boolean(currentUser.isProMember);
+    const buyerDist = (payload.buyerDistrict || currentUser.district || 'Chennai').trim();
+    const allSameDistrict = targetComps.every((c) => {
+      const b = boardMap.get(c.donorBoardId);
+      return (
+        (b?.sellerDistrict || 'Chennai').toLowerCase().trim() ===
+        buyerDist.toLowerCase()
+      );
+    });
+
+    const totalPartsInr = targetComps.reduce((s, c) => s + c.partPriceInr, 0);
+    const totalExtractionInr = targetComps.reduce((s, c) => {
+      const b = boardMap.get(c.donorBoardId);
+      return s + (b?.hardwareMode === 'READY_TO_USE' ? 0 : c.extractionFeeInr);
+    }, 0);
+    const unifiedCommissionInr = isPro
+      ? 0
+      : Math.min(15, Math.max(5, Math.round((totalPartsInr + totalExtractionInr) * 0.05)));
+    const bundledShippingInr = allSameDistrict ? 35 : 45;
+    const deliveryType: DeliveryType = allSameDistrict
+      ? 'HYPERLOCAL_RAPIDO'
+      : 'OUTSTATION_PARCEL';
+    const partnerLabel = allSameDistrict
+      ? 'Rapido Bike Parcel (Bundled)'
+      : 'India Post Speed Post (Bundled)';
+
+    // Atomically mark all purchased components as EXTRACTED_SOLD
+    const purchasedSet = new Set(uniqueCompIds);
+    const affectedBoardIds = new Set(targetComps.map((c) => c.donorBoardId));
+
+    const updatedComponents = components.map((c) =>
+      purchasedSet.has(c.id) ? { ...c, status: 'EXTRACTED_SOLD' as const } : c
+    );
+    setComponents(updatedComponents);
+
+    // Update each affected parent board's intactComponentsCount and transition to PARTIALLY_HARVESTED
+    setBoards((prev) =>
+      prev.map((b) => {
+        if (!affectedBoardIds.has(b.id)) return b;
+        const boardComps = updatedComponents.filter((c) => c.donorBoardId === b.id);
+        const totalCount = b.totalComponentsCount ?? boardComps.length;
+        const remainingIntact = boardComps.filter((c) => c.status === 'INTACT').length;
+        return {
+          ...b,
+          intactComponentsCount: remainingIntact,
+          status:
+            remainingIntact < totalCount || b.status === 'AVAILABLE'
+              ? 'PARTIALLY_HARVESTED'
+              : b.status,
+        };
+      })
+    );
+
+    // Expire any remaining PENDING or ACCEPTED bargains on sold components or affected raw boards
+    setBargainOffers((prev) =>
+      prev.map((offer) => {
+        if (offer.status !== 'PENDING' && offer.status !== 'ACCEPTED') {
+          return offer;
+        }
+        if (offer.componentId && purchasedSet.has(offer.componentId)) {
+          return { ...offer, status: 'EXPIRED' };
+        }
+        if (
+          affectedBoardIds.has(offer.boardId) &&
+          (offer.targetType === 'BOARD' || !offer.componentId)
+        ) {
+          return { ...offer, status: 'EXPIRED' };
+        }
+        return offer;
+      })
+    );
+
+    // Create linked Order records so each component requiring hot-air extraction appears in the Workbench queue
+    let nextOrderNum = getNextNumericId(
+      orders.map((o) => o.orderCode || o.id),
+      'SH-ORD-',
+      2040
+    );
+
+    const createdOrders: Order[] = targetComps.map((comp, idx) => {
+      const parentBoard = boardMap.get(comp.donorBoardId)!;
+      const compExtractionFee =
+        parentBoard.hardwareMode === 'READY_TO_USE' ? 0 : comp.extractionFeeInr;
+      const requiresExtraction =
+        parentBoard.hardwareMode !== 'READY_TO_USE' && compExtractionFee > 0;
+      // Attach bundled shipping & commission to first order in the bulk batch so grand total matches 100%
+      const orderDeliveryFee = idx === 0 ? bundledShippingInr : 0;
+      const orderCommissionFee = idx === 0 ? unifiedCommissionInr : 0;
+      const orderTotal =
+        comp.partPriceInr + compExtractionFee + orderDeliveryFee + orderCommissionFee;
+      const orderCode = `SH-ORD-${nextOrderNum + idx}`;
+
+      return {
+        id: `ORD-${nextOrderNum + idx}`,
+        orderCode,
+        buyerId: currentUser.id,
+        buyerEmail: currentUser.email,
+        buyerName: payload.buyerName,
+        buyerPhone: payload.buyerPhone,
+        buyerAddress: payload.buyerAddress,
+        buyerState: payload.buyerState || currentUser.state || 'Tamil Nadu',
+        buyerDistrict: buyerDist,
+        buyerPincode: payload.buyerPincode || currentUser.pincode || '600001',
+        sellerId: parentBoard.sellerId,
+        sellerEmail: parentBoard.sellerEmail,
+        sellerName: parentBoard.sellerName,
+        sellerPhone: parentBoard.sellerPhone,
+        sellerDistrict: parentBoard.sellerDistrict || parentBoard.locationCity || 'Chennai',
+        donorBoardId: parentBoard.id,
+        componentId: comp.id,
+        componentIds: uniqueCompIds,
+        mode: 'EXTRACTED_TESTED_PART',
+        hardwareMode: parentBoard.hardwareMode,
+        deliveryType,
+        logisticsPartner: partnerLabel,
+        itemPriceInr: comp.partPriceInr,
+        extractionFeeInr: compExtractionFee,
+        deliveryFeeInr: orderDeliveryFee,
+        platformCommissionInr: orderCommissionFee,
+        totalPayableInr: orderTotal,
+        totalPriceInr: orderTotal,
+        isProOrder: isPro,
+        bargainDiscountInr: 0,
+        status: requiresExtraction ? 'PENDING_EXTRACTION' : 'READY_FOR_DISPATCH',
+        multimeterReadingValue: requiresExtraction
+          ? ''
+          : 'Pre-Desoldered Ready-to-Use Spare (Verified)',
+        trackingOrPorterLink: '',
+        upiUtrOrPaymentId: payload.upiUtrOrPaymentId || '',
+        paymentUtr: payload.upiUtrOrPaymentId || '',
+        createdAt: new Date().toISOString(),
+      };
+    });
+
+    setOrders((prev) => [...createdOrders, ...prev]);
+    broadcastLocalStateUpdate();
+
+    createdOrders.forEach((ord) => {
+      syncCreateOrderBackend(ord).catch(() => undefined);
+    });
+
+    return createdOrders;
+  };
+
   const publishDonorBoard = (input: NewBoardListingInput): DonorBoard => {
     const nextBoardNumber = getNextNumericId(
       boards.map((b) => b.id),
@@ -954,10 +1228,47 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     const newBoardId = `BRD-${nextBoardNumber}`;
 
     const hwMode = input.hardwareMode || 'READY_TO_USE';
+    const resolvedSellerId = input.sellerId || currentUser.id;
+    const resolvedSellerEmail = input.sellerEmail || currentUser.email;
+
+    // Distinct pricing for BOTH vs READY_TO_USE vs SOLDERED_RAW
+    const singlePartPrice =
+      hwMode === 'BOTH'
+        ? input.desolderedPriceInr ?? Math.max(10, Math.round(input.rawBoardPriceInr * 0.5))
+        : input.rawBoardPriceInr;
+    const fullRawBoardPrice =
+      hwMode === 'BOTH'
+        ? Math.max(singlePartPrice, input.rawBoardPriceInr)
+        : input.rawBoardPriceInr;
 
     const componentsList =
       input.components && input.components.length > 0
         ? input.components
+        : hwMode === 'BOTH'
+        ? [
+            {
+              partNumber: input.subModel || input.boardName,
+              partName: `${input.boardName} — Primary Target IC / Module`,
+              componentCategory: 'Primary Harvestable IC',
+              packageType: 'SMD / Through-Hole',
+              difficulty: 'LEVEL_3_HOT_AIR_SMD' as const,
+              recommendedTempC: 320,
+              partPriceInr: singlePartPrice,
+              extractionFeeInr: 20,
+              isPrimaryFault: false,
+            },
+            {
+              partNumber: `${(input.subModel || input.boardName).slice(0, 12)}-AUX`,
+              partName: `${input.boardName} — Secondary Power / Relay Stage`,
+              componentCategory: 'Secondary Power Stage',
+              packageType: 'Through-Hole / SMD',
+              difficulty: 'LEVEL_2_BASIC_IRON' as const,
+              recommendedTempC: 300,
+              partPriceInr: Math.max(15, Math.round(singlePartPrice * 0.75)),
+              extractionFeeInr: 15,
+              isPrimaryFault: false,
+            },
+          ]
         : [
             {
               partNumber: input.subModel || input.boardName,
@@ -973,38 +1284,39 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
                   ? ('LEVEL_2_BASIC_IRON' as const)
                   : ('LEVEL_1_PLUG_PULL' as const),
               recommendedTempC: hwMode === 'SOLDERED_RAW' ? 320 : 25,
-              partPriceInr: input.rawBoardPriceInr,
+              partPriceInr: singlePartPrice,
               extractionFeeInr: hwMode === 'READY_TO_USE' ? 0 : 15,
               isPrimaryFault: false,
             },
           ];
 
     const intactCount = componentsList.filter((c) => !c.isPrimaryFault).length;
-    const district = input.sellerDistrict || 'Chennai';
+    const district = input.sellerDistrict || currentUser.district || 'Chennai';
 
     const newBoard: DonorBoard = {
       id: newBoardId,
       boardName: input.boardName,
       category: input.category,
       subModel: input.subModel,
-      sellerName: input.sellerName,
-      sellerPhone: input.sellerPhone,
-      sellerState: input.sellerState || 'Tamil Nadu',
+      sellerId: resolvedSellerId,
+      sellerEmail: resolvedSellerEmail,
+      sellerName: input.sellerName || currentUser.fullName || 'Verified Seller',
+      sellerPhone: input.sellerPhone || currentUser.phone,
+      sellerState: input.sellerState || currentUser.state || 'Tamil Nadu',
       sellerDistrict: district,
-      sellerPincode: input.sellerPincode || '600001',
+      sellerPincode: input.sellerPincode || currentUser.pincode || '600001',
       sellerFullAddress: input.sellerFullAddress || `${input.locationArea}, ${district}`,
       locationCity: district,
       locationArea: input.locationArea,
       distanceKm: input.distanceKm,
       primaryFault: input.primaryFault,
-      rawBoardPriceInr: input.rawBoardPriceInr,
+      rawBoardPriceInr: fullRawBoardPrice,
       desolderedPriceInr:
-        input.desolderedPriceInr ??
-        (hwMode === 'SOLDERED_RAW'
+        hwMode === 'SOLDERED_RAW'
           ? undefined
           : hwMode === 'READY_TO_USE'
-          ? input.rawBoardPriceInr
-          : input.rawBoardPriceInr + 25),
+          ? singlePartPrice
+          : singlePartPrice,
       hardwareMode: hwMode,
       allowBargain: input.allowBargain ?? true,
       isVerified: input.isVerified ?? true,
@@ -1019,6 +1331,7 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       (comp, idx) => ({
         id: `CMP-${nextBoardNumber}-${idx + 1}`,
         donorBoardId: newBoardId,
+        sellerId: resolvedSellerId,
         partNumber: comp.partNumber,
         partName: comp.partName,
         componentCategory: comp.componentCategory,
@@ -1041,6 +1354,7 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     if (connectionMode === 'SUPABASE_CLOUD') {
       supabasePublishDonorBoard({
         ...input,
+        rawBoardPriceInr: fullRawBoardPrice,
         components: componentsList.map((c) => ({
           ...c,
           isPrimaryFault: Boolean(c.isPrimaryFault),
@@ -1058,10 +1372,66 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   const submitBargainOffer = (
     offerInput: Omit<BargainOffer, 'id' | 'status' | 'createdAt'>
   ): BargainOffer => {
-    const targetType = offerInput.targetType || (offerInput.componentId ? 'COMPONENT' : 'BOARD');
-    const targetId = offerInput.targetId || offerInput.componentId || offerInput.boardId;
+    const parentBoard = boards.find((b) => b.id === offerInput.boardId);
+
+    // 1. Self-Bargain Guard
+    const resolvedSellerId = offerInput.sellerId || parentBoard?.sellerId;
+    if (resolvedSellerId && resolvedSellerId === currentUser.id) {
+      throw new Error(
+        'Self-bargain guard: You cannot submit a bargain offer on your own listing.'
+      );
+    }
+
+    // 2. Store-Level Price Bounds Validation (50% floor to < 100% original price)
+    const minAllowedOffer = Math.ceil(offerInput.originalPriceInr * 0.5);
+    if (
+      offerInput.offeredPriceInr < minAllowedOffer ||
+      offerInput.offeredPriceInr >= offerInput.originalPriceInr
+    ) {
+      throw new Error(
+        `Bargain offer must be between ₹${minAllowedOffer} (50% floor) and ₹${
+          offerInput.originalPriceInr - 1
+        }.`
+      );
+    }
+
+    const targetType =
+      offerInput.targetType || (offerInput.componentId ? 'COMPONENT' : 'BOARD');
+    const targetId =
+      offerInput.targetId || offerInput.componentId || offerInput.boardId;
+
+    // 3. Prevent Duplicate Bargain Offers: update existing PENDING offer for same buyer & target
+    const existingPending = bargainOffers.find(
+      (o) =>
+        o.status === 'PENDING' &&
+        o.buyerId === (offerInput.buyerId || currentUser.id) &&
+        o.boardId === offerInput.boardId &&
+        (o.targetType || (o.componentId ? 'COMPONENT' : 'BOARD')) === targetType &&
+        (o.componentId || null) === (offerInput.componentId || null)
+    );
+
+    if (existingPending) {
+      const updatedOffer: BargainOffer = {
+        ...existingPending,
+        ...offerInput,
+        sellerId: resolvedSellerId,
+        targetType,
+        targetId,
+        status: 'PENDING',
+        createdAt: new Date().toISOString(),
+      };
+      setBargainOffers((prev) =>
+        prev.map((o) => (o.id === existingPending.id ? updatedOffer : o))
+      );
+      broadcastLocalStateUpdate();
+      syncCreateBargainBackend(updatedOffer).catch(() => undefined);
+      return updatedOffer;
+    }
+
     const newOffer: BargainOffer = {
       ...offerInput,
+      buyerId: offerInput.buyerId || currentUser.id,
+      sellerId: resolvedSellerId,
       targetType,
       targetId,
       id: `BRG-${Date.now().toString().slice(-6)}`,
@@ -1076,13 +1446,26 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const acceptBargainOffer = (offerId: string) => {
     const targetOffer = bargainOffers.find((o) => o.id === offerId);
+    if (!targetOffer) return;
+
+    const isOwner =
+      currentUser.role === 'OWNER_ADMIN' || Boolean(currentUser.isOwnerAdmin);
+    // Strict guard: A buyer can NEVER accept their own bargain offer
+    if (!isOwner && targetOffer.buyerId === currentUser.id) {
+      throw new Error(
+        'Authorization guard: Buyers cannot accept their own bargain offers.'
+      );
+    }
+
     setBargainOffers((prev) =>
       prev.map((o) => (o.id === offerId ? { ...o, status: 'ACCEPTED' } : o))
     );
     broadcastLocalStateUpdate();
-    syncUpdateBargainStatusBackend(offerId, 'ACCEPTED', targetOffer?.offeredPriceInr).catch(
-      () => undefined
-    );
+    syncUpdateBargainStatusBackend(
+      offerId,
+      'ACCEPTED',
+      targetOffer?.offeredPriceInr
+    ).catch(() => undefined);
   };
 
   const rejectBargainOffer = (offerId: string) => {
@@ -1091,6 +1474,37 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     );
     broadcastLocalStateUpdate();
     syncUpdateBargainStatusBackend(offerId, 'REJECTED').catch(() => undefined);
+  };
+
+  const cancelBargainOffer = (offerId: string) => {
+    setBargainOffers((prev) =>
+      prev.map((o) =>
+        o.id === offerId && o.buyerId === currentUser.id
+          ? { ...o, status: 'CANCELLED' }
+          : o
+      )
+    );
+    broadcastLocalStateUpdate();
+  };
+
+  const dispatchOrderBySeller = (
+    orderId: string,
+    trackingOrPorterLink: string,
+    targetStatus: OrderStatus = 'IN_TRANSIT'
+  ) => {
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.id === orderId
+          ? {
+              ...o,
+              trackingOrPorterLink:
+                trackingOrPorterLink.trim() || o.trackingOrPorterLink || '',
+              status: targetStatus,
+            }
+          : o
+      )
+    );
+    broadcastLocalStateUpdate();
   };
 
   const upgradeToProMembership = (plan: 'monthly' | 'yearly') => {
@@ -1398,10 +1812,13 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         disconnectSupabase,
         refreshFromSupabase,
         placeOrder,
+        placeBulkCartOrder,
         publishDonorBoard,
         submitBargainOffer,
         acceptBargainOffer,
         rejectBargainOffer,
+        cancelBargainOffer,
+        dispatchOrderBySeller,
         upgradeToProMembership,
         toggleUserProStatus,
         switchOwnerAdmin,

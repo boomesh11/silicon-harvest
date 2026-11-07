@@ -49,6 +49,7 @@ export type OrderStatus =
   | 'PENDING_EXTRACTION'
   | 'PICKED_UP_BY_PARTNER'
   | 'READY_FOR_DISPATCH'
+  | 'IN_TRANSIT'
   | 'DELIVERED'
   | 'COMPLETED';
 
@@ -62,6 +63,8 @@ export interface DonorBoard {
   boardName: string;
   category: BoardCategory;
   subModel?: string;
+  sellerId?: string;
+  sellerEmail?: string;
   sellerName: string;
   sellerPhone?: string;
   sellerState?: string;
@@ -87,6 +90,7 @@ export interface DonorBoard {
 export interface HarvestableComponent {
   id: string;
   donorBoardId: string;
+  sellerId?: string;
   partNumber: string;
   partName: string;
   componentCategory: string;
@@ -102,16 +106,24 @@ export interface HarvestableComponent {
 export interface Order {
   id: string;
   orderCode: string;
+  buyerId?: string;
+  buyerEmail?: string;
   buyerName: string;
   buyerPhone: string;
   buyerAddress: string;
   buyerState?: string;
   buyerDistrict?: string;
   buyerPincode?: string;
+  sellerId?: string;
+  sellerEmail?: string;
+  sellerName?: string;
+  sellerPhone?: string;
   sellerDistrict?: string;
   donorBoardId: string;
   componentId: string | null;
+  componentIds?: string[];
   mode: OrderMode;
+  hardwareMode?: HardwareMode;
   deliveryType: DeliveryType;
   logisticsPartner?: string;
   itemPriceInr: number;
@@ -131,6 +143,14 @@ export interface Order {
   createdAt: string;
 }
 
+export type BargainStatus =
+  | 'PENDING'
+  | 'ACCEPTED'
+  | 'REJECTED'
+  | 'REDEEMED'
+  | 'EXPIRED'
+  | 'CANCELLED';
+
 export interface BargainOffer {
   id: string;
   boardId: string;
@@ -139,16 +159,19 @@ export interface BargainOffer {
   targetId?: string;
   boardName: string;
   buyerId: string;
+  buyerEmail?: string;
   buyerName: string;
   buyerPhone: string;
   buyerDistrict: string;
+  sellerId?: string;
+  sellerEmail?: string;
   sellerName: string;
   sellerPhone: string;
   sellerDistrict: string;
   originalPriceInr: number;
   offeredPriceInr: number;
   note?: string;
-  status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'REDEEMED';
+  status: BargainStatus;
   createdAt: string;
 }
 

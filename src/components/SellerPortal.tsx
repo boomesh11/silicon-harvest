@@ -8,6 +8,8 @@ import {
   Sparkles,
   Phone,
   UserCheck,
+  Plus,
+  Lock,
 } from 'lucide-react';
 import { useHarvestStore } from '../store/useHarvestStore';
 import {
@@ -17,9 +19,18 @@ import {
 } from '../data/catalogPricing';
 import { HardwareMode, DonorBoard, BoardCategory } from '../types/harvest';
 import { Tilt3DCard } from './Tilt3DCard';
+import { getSupabaseClient } from '../lib/supabase';
+
+interface ChildPartInput {
+  partNumber: string;
+  partName: string;
+  partPriceInr: number;
+  extractionFeeInr: number;
+}
 
 export const SellerPortal: React.FC = () => {
-  const { publishDonorBoard, setActiveTab, currentUser } = useHarvestStore();
+  const { publishDonorBoard, setActiveTab, currentUser, isSignedIn } =
+    useHarvestStore();
 
   // Step state (1: Category, 2: Details & Mode, 3: Photos, 4: Price & Publish)
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
@@ -38,6 +49,16 @@ export const SellerPortal: React.FC = () => {
   const [sellingPrice, setSellingPrice] = useState<number>(
     CATALOG_CATEGORIES[0].recommendedPrice
   );
+  const [desolderedPartPrice, setDesolderedPartPrice] = useState<number>(
+    Math.max(
+      CATALOG_CATEGORIES[0].minPrice,
+      Math.round(CATALOG_CATEGORIES[0].recommendedPrice * 0.55)
+    )
+  );
+  const [childParts, setChildParts] = useState<ChildPartInput[]>([]);
+  const [newChildPartName, setNewChildPartName] = useState<string>('');
+  const [newChildPartNumber, setNewChildPartNumber] = useState<string>('');
+  const [newChildPartPrice, setNewChildPartPrice] = useState<number>(45);
 
   // Photo Upload State
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -71,6 +92,9 @@ export const SellerPortal: React.FC = () => {
   const handleSelectCategory = (cat: CatalogCategory) => {
     setSelectedCategory(cat);
     setSellingPrice(cat.recommendedPrice);
+    setDesolderedPartPrice(
+      Math.max(cat.minPrice, Math.round(cat.recommendedPrice * 0.55))
+    );
     if (!boardName || selectedCategory.quickFillChips.includes(boardName)) {
       setBoardName(cat.quickFillChips[0] || '');
     }
@@ -89,7 +113,7 @@ export const SellerPortal: React.FC = () => {
     }
   }, [currentUser]);
 
-  // Client-side HTML5 Canvas Photo Compression (zero API key)
+  // Client-side HTML5 Canvas Photo Compression (max 640px @ 0.72 quality < ~45KB + optional Supabase Storage)
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -100,9 +124,9 @@ export const SellerPortal: React.FC = () => {
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
-      img.onload = () => {
+      img.onload = async () => {
         const canvas = document.createElement('canvas');
-        const maxDim = 1000;
+        const maxDim = 640;
         let width = img.width;
         let height = img.height;
 
@@ -119,8 +143,33 @@ export const SellerPortal: React.FC = () => {
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0, width, height);
-          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.82);
+          let compressedDataUrl = canvas.toDataURL('image/webp', 0.72);
+          if (!compressedDataUrl.startsWith('data:image/webp')) {
+            compressedDataUrl = canvas.toDataURL('image/jpeg', 0.72);
+          }
           setImageUrl(compressedDataUrl);
+
+          const sbClient = getSupabaseClient();
+          if (sbClient) {
+            try {
+              const res = await fetch(compressedDataUrl);
+              const blob = await res.blob();
+              const fileName = `board-${Date.now()}-${Math.floor(Math.random() * 1000)}.webp`;
+              const { data: uploadData, error: uploadError } = await sbClient.storage
+                .from('board-photos')
+                .upload(fileName, blob, { contentType: blob.type, upsert: true });
+              if (!uploadError && uploadData) {
+                const { data: pubData } = sbClient.storage
+                  .from('board-photos')
+                  .getPublicUrl(fileName);
+                if (pubData?.publicUrl) {
+                  setImageUrl(pubData.publicUrl);
+                }
+              }
+            } catch {
+              // Keep local compressed DataURL (<45KB) if storage bucket isn't provisioned
+            }
+          }
         }
         setIsProcessingImage(false);
       };
@@ -129,9 +178,38 @@ export const SellerPortal: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
+  const handleAddChildPart = () => {
+    if (!newChildPartName.trim()) return;
+    const partCode =
+      newChildPartNumber.trim().toUpperCase() ||
+      newChildPartName.trim().toUpperCase().slice(0, 12);
+    setChildParts((prev) => [
+      ...prev,
+      {
+        partNumber: partCode,
+        partName: newChildPartName.trim(),
+        partPriceInr: Math.max(10, Number(newChildPartPrice) || 40),
+        extractionFeeInr: 25,
+      },
+    ]);
+    setNewChildPartName('');
+    setNewChildPartNumber('');
+    setNewChildPartPrice(desolderedPartPrice);
+  };
+
+  const handleRemoveChildPart = (idx: number) => {
+    setChildParts((prev) => prev.filter((_, i) => i !== idx));
+  };
+
   const handlePublish = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
+
+    if (!isSignedIn) {
+      setErrorMsg('Please sign in first before publishing a listing.');
+      setActiveTab('LOGIN');
+      return;
+    }
 
     if (!boardName.trim()) {
       setErrorMsg('Please specify what product or spare part you are selling.');
@@ -141,12 +219,20 @@ export const SellerPortal: React.FC = () => {
 
     if (
       sellingPrice < selectedCategory.minPrice ||
-      sellingPrice > selectedCategory.maxPrice * 2
+      sellingPrice > selectedCategory.maxPrice * 3
     ) {
       setErrorMsg(
         `Please specify a fair price between ₹${selectedCategory.minPrice} and ₹${
-          selectedCategory.maxPrice * 2
+          selectedCategory.maxPrice * 3
         }.`
+      );
+      setCurrentStep(4);
+      return;
+    }
+
+    if (hardwareMode === 'BOTH' && sellingPrice < desolderedPartPrice) {
+      setErrorMsg(
+        `Full Raw Donor Board As-Is Price (₹${sellingPrice}) must be greater than or equal to the Single Target Part Price (₹${desolderedPartPrice}).`
       );
       setCurrentStep(4);
       return;
@@ -177,10 +263,54 @@ export const SellerPortal: React.FC = () => {
       AUDIO_TV_CONSUMER: '/assets/3d/hero-pcb.png',
     };
 
+    const resolvedImageUrl =
+      imageUrl ||
+      categoryFallbackImages[selectedCategory.id] ||
+      '/assets/3d/hero-pcb.png';
+
+    const defaultCompCategory =
+      selectedCategory.id === 'IC_MICROCONTROLLERS'
+        ? 'Microcontroller / Logic IC'
+        : selectedCategory.id === 'BATTERIES_POWER_CELLS'
+        ? 'Lithium Cell / BMS'
+        : selectedCategory.id === 'MOTORS_ROBOTICS_CNC'
+        ? 'Motor / Actuator'
+        : selectedCategory.id === 'SMPS_POWER_INVERTERS'
+        ? 'Power MOSFET / SMPS IC'
+        : 'Electronic Spare';
+
+    const customComponents =
+      hardwareMode === 'BOTH' && childParts.length > 0
+        ? [
+            {
+              partNumber: boardName.trim().toUpperCase().slice(0, 14),
+              partName: `${boardName.trim()} (Primary Target IC/Part)`,
+              componentCategory: defaultCompCategory,
+              packageType: 'Soldered Target Spare',
+              difficulty: 'LEVEL_2_BASIC_IRON' as const,
+              recommendedTempC: 330,
+              partPriceInr: desolderedPartPrice,
+              extractionFeeInr: 25,
+            },
+            ...childParts.map((cp) => ({
+              partNumber: cp.partNumber,
+              partName: cp.partName,
+              componentCategory: defaultCompCategory,
+              packageType: 'Soldered Target Spare',
+              difficulty: 'LEVEL_2_BASIC_IRON' as const,
+              recommendedTempC: 330,
+              partPriceInr: cp.partPriceInr,
+              extractionFeeInr: cp.extractionFeeInr,
+            })),
+          ]
+        : undefined;
+
     const newBoard = publishDonorBoard({
       boardName: boardName.trim(),
       category: selectedCategory.id as BoardCategory,
       subModel: boardName.trim(),
+      sellerId: currentUser.id,
+      sellerEmail: currentUser.email,
       sellerName: sellerName.trim() || currentUser.fullName || 'Verified Seller',
       sellerPhone: `+91 ${cleanDigits}`,
       sellerState: state,
@@ -196,14 +326,12 @@ export const SellerPortal: React.FC = () => {
           ? undefined
           : hardwareMode === 'READY_TO_USE'
           ? sellingPrice
-          : sellingPrice + 25,
+          : desolderedPartPrice,
       hardwareMode,
       allowBargain,
       isVerified: true,
-      imageUrl:
-        imageUrl ||
-        categoryFallbackImages[selectedCategory.id] ||
-        '/assets/3d/hero-pcb.png',
+      imageUrl: resolvedImageUrl,
+      components: customComponents,
     });
 
     setPublishedBoard(newBoard);
@@ -298,6 +426,29 @@ export const SellerPortal: React.FC = () => {
           </div>
         ) : (
           <form onSubmit={handlePublish} className="space-y-6">
+            {!isSignedIn && (
+              <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start gap-2.5 text-xs text-amber-900">
+                  <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-extrabold block">
+                      Seller Account Required to Publish Listings
+                    </span>
+                    <span className="text-amber-800">
+                      Sign in with your Mobile OTP, Google, or Email so buyers can send you orders &amp; bargain offers under your verified Seller ID.
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('LOGIN')}
+                  className="min-h-[38px] px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shrink-0 shadow-sm"
+                >
+                  Sign In to Sell →
+                </button>
+              </div>
+            )}
+
             {errorMsg && (
               <div className="rounded-2xl border border-rose-300 bg-rose-50 p-4 text-xs font-semibold text-rose-800">
                 {errorMsg}
@@ -604,67 +755,276 @@ export const SellerPortal: React.FC = () => {
                   </p>
                 </div>
 
-                {/* Interactive Fair Price Range Slider */}
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                        Know What It&apos;s Worth
-                      </span>
-                      <div className="text-xs text-slate-600 mt-0.5">
-                        Benchmark for <strong>{selectedCategory.name}</strong>
+                {/* Interactive Fair Price Range Slider(s) */}
+                {hardwareMode === 'BOTH' ? (
+                  <div className="space-y-4">
+                    {/* Price Input 1: Desoldered Single Target Part Price */}
+                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-5 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-700">
+                            1. Desoldered Single Target Part Price (₹)
+                          </span>
+                          <div className="text-xs text-slate-600 mt-0.5">
+                            Price for extracting 1 target IC / relay / component (+₹25 Tech Workbench QC fee added at checkout)
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-2xl font-black text-emerald-600 font-mono">
+                            ₹{desolderedPartPrice}
+                          </div>
+                          <span className="text-[11px] text-slate-500">
+                            Single Extracted Part
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <input
+                          type="range"
+                          min={selectedCategory.minPrice}
+                          max={selectedCategory.maxPrice}
+                          step={5}
+                          value={desolderedPartPrice}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            setDesolderedPartPrice(val);
+                            if (sellingPrice < val) {
+                              setSellingPrice(val);
+                            }
+                          }}
+                          className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-2 border-t border-emerald-200/60">
+                        <span className="text-xs text-slate-600 font-medium">
+                          Exact Single Part Price:
+                        </span>
+                        <div className="relative w-32">
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                            ₹
+                          </span>
+                          <input
+                            type="number"
+                            min={selectedCategory.minPrice}
+                            max={selectedCategory.maxPrice * 2}
+                            value={desolderedPartPrice}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setDesolderedPartPrice(val);
+                              if (sellingPrice < val) {
+                                setSellingPrice(val);
+                              }
+                            }}
+                            className="w-full pl-6 pr-2 py-1 text-xs font-bold font-mono border border-slate-300 rounded-lg bg-white"
+                          />
+                        </div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-2xl font-black text-emerald-600 font-mono">
-                        ₹{sellingPrice}
+
+                    {/* Price Input 2: Full Raw Donor Board As-Is Price */}
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
+                            2. Full Raw Donor Board As-Is Price (₹)
+                          </span>
+                          <div className="text-xs text-slate-600 mt-0.5">
+                            Price if buyer wants the entire unharvested PCB assembly shipped raw (must be ≥ ₹{desolderedPartPrice})
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-2xl font-black text-slate-900 font-mono">
+                            ₹{sellingPrice}
+                          </div>
+                          <span className="text-[11px] text-slate-500">
+                            Full Donor Board
+                          </span>
+                        </div>
                       </div>
-                      <span className="text-[11px] text-slate-400">
-                        Fixed Component Price
-                      </span>
+
+                      <div className="space-y-2">
+                        <input
+                          type="range"
+                          min={Math.max(selectedCategory.minPrice, desolderedPartPrice)}
+                          max={selectedCategory.maxPrice * 2}
+                          step={5}
+                          value={sellingPrice}
+                          onChange={(e) => setSellingPrice(Number(e.target.value))}
+                          className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slate-900"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-2 border-t border-slate-200">
+                        <span className="text-xs text-slate-600 font-medium">
+                          Exact Full Board Price:
+                        </span>
+                        <div className="relative w-32">
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                            ₹
+                          </span>
+                          <input
+                            type="number"
+                            min={desolderedPartPrice}
+                            max={selectedCategory.maxPrice * 3}
+                            value={sellingPrice}
+                            onChange={(e) => setSellingPrice(Number(e.target.value))}
+                            className="w-full pl-6 pr-2 py-1 text-xs font-bold font-mono border border-slate-300 rounded-lg bg-white"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Optional Multi-Component Harvest List on this Board */}
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-xs font-extrabold text-slate-900">
+                            Additional Harvestable Components on this Board (Optional)
+                          </h4>
+                          <p className="text-[11px] text-slate-500">
+                            Add specific ICs, relays, or MOSFETs on this PCB so buyers can pick individual parts or buy the whole board.
+                          </p>
+                        </div>
+                      </div>
+
+                      {childParts.length > 0 && (
+                        <div className="space-y-1.5">
+                          {childParts.map((cp, idx) => (
+                            <div
+                              key={idx}
+                              className="flex items-center justify-between rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 text-xs"
+                            >
+                              <div>
+                                <span className="font-mono font-bold text-emerald-700 mr-2">
+                                  {cp.partNumber}
+                                </span>
+                                <span className="font-semibold text-slate-800">
+                                  {cp.partName}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-bold text-slate-900">
+                                  ₹{cp.partPriceInr}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveChildPart(idx)}
+                                  className="text-rose-600 hover:text-rose-700 p-1"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 pt-1">
+                        <input
+                          type="text"
+                          value={newChildPartNumber}
+                          onChange={(e) => setNewChildPartNumber(e.target.value)}
+                          placeholder="Part Code (e.g. G5Q-14)"
+                          className="px-2.5 py-2 text-xs border border-slate-300 rounded-xl font-mono"
+                        />
+                        <input
+                          type="text"
+                          value={newChildPartName}
+                          onChange={(e) => setNewChildPartName(e.target.value)}
+                          placeholder="Part Name (e.g. 12V Relay)"
+                          className="px-2.5 py-2 text-xs border border-slate-300 rounded-xl sm:col-span-1"
+                        />
+                        <div className="relative">
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                            ₹
+                          </span>
+                          <input
+                            type="number"
+                            min={10}
+                            value={newChildPartPrice}
+                            onChange={(e) => setNewChildPartPrice(Number(e.target.value))}
+                            className="w-full pl-6 pr-2 py-2 text-xs font-mono font-bold border border-slate-300 rounded-xl"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleAddChildPart}
+                          className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center justify-center gap-1"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add Part</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
-
-                  {/* Range Slider */}
-                  <div className="space-y-2">
-                    <input
-                      type="range"
-                      min={selectedCategory.minPrice}
-                      max={selectedCategory.maxPrice}
-                      step={5}
-                      value={sellingPrice}
-                      onChange={(e) => setSellingPrice(Number(e.target.value))}
-                      className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
-                    />
-                    <div className="flex justify-between text-[11px] font-mono text-slate-500">
-                      <span>Min: ₹{selectedCategory.minPrice}</span>
-                      <span className="text-emerald-700 font-bold">
-                        Recommended: ₹{selectedCategory.recommendedPrice}
-                      </span>
-                      <span>Max: ₹{selectedCategory.maxPrice}</span>
+                ) : (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                          {hardwareMode === 'READY_TO_USE'
+                            ? 'Ready-to-Use Component Price'
+                            : 'Full Raw Donor Board Price'}
+                        </span>
+                        <div className="text-xs text-slate-600 mt-0.5">
+                          Benchmark for <strong>{selectedCategory.name}</strong>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-2xl font-black text-emerald-600 font-mono">
+                          ₹{sellingPrice}
+                        </div>
+                        <span className="text-[11px] text-slate-400">
+                          {hardwareMode === 'READY_TO_USE'
+                            ? 'Pre-Desoldered Part (₹0 QC Fee)'
+                            : 'Raw Donor Board As-Is'}
+                        </span>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Manual input fallback */}
-                  <div className="flex items-center gap-2 pt-2 border-t border-slate-200">
-                    <span className="text-xs text-slate-600 font-medium">
-                      Or type exact price:
-                    </span>
-                    <div className="relative w-32">
-                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
-                        ₹
-                      </span>
+                    {/* Range Slider */}
+                    <div className="space-y-2">
                       <input
-                        type="number"
+                        type="range"
                         min={selectedCategory.minPrice}
-                        max={selectedCategory.maxPrice * 2}
+                        max={selectedCategory.maxPrice}
+                        step={5}
                         value={sellingPrice}
                         onChange={(e) => setSellingPrice(Number(e.target.value))}
-                        className="w-full pl-6 pr-2 py-1 text-xs font-bold font-mono border border-slate-300 rounded-lg"
+                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
                       />
+                      <div className="flex justify-between text-[11px] font-mono text-slate-500">
+                        <span>Min: ₹{selectedCategory.minPrice}</span>
+                        <span className="text-emerald-700 font-bold">
+                          Recommended: ₹{selectedCategory.recommendedPrice}
+                        </span>
+                        <span>Max: ₹{selectedCategory.maxPrice}</span>
+                      </div>
+                    </div>
+
+                    {/* Manual input fallback */}
+                    <div className="flex items-center gap-2 pt-2 border-t border-slate-200">
+                      <span className="text-xs text-slate-600 font-medium">
+                        Or type exact price:
+                      </span>
+                      <div className="relative w-32">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                          ₹
+                        </span>
+                        <input
+                          type="number"
+                          min={selectedCategory.minPrice}
+                          max={selectedCategory.maxPrice * 2}
+                          value={sellingPrice}
+                          onChange={(e) => setSellingPrice(Number(e.target.value))}
+                          className="w-full pl-6 pr-2 py-1 text-xs font-bold font-mono border border-slate-300 rounded-lg"
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 {/* Allow Buyers to Bargain Checkbox */}
                 <label className="flex items-start gap-3 p-3.5 rounded-2xl border border-amber-200 bg-amber-50/50 cursor-pointer">

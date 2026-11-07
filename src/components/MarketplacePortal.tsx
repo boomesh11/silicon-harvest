@@ -48,7 +48,7 @@ export const MarketplacePortal: React.FC = () => {
     boards,
     components,
     setActiveTab,
-    placeOrder,
+    placeBulkCartOrder,
     submitBargainOffer,
     currentUser,
     pendingCheckoutTarget,
@@ -305,16 +305,29 @@ export const MarketplacePortal: React.FC = () => {
     ? bargainTargetComponent.partPriceInr
     : bargainTargetBoard?.rawBoardPriceInr ?? 100;
 
-  const bargainMinPrice = Math.max(10, Math.round(bargainOriginalPrice * 0.4));
+  const bargainMinPrice = Math.max(10, Math.ceil(bargainOriginalPrice * 0.5));
+  const bargainMaxPrice = Math.max(bargainMinPrice, bargainOriginalPrice - 1);
 
   const handleBargainSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!bargainTargetBoard) return;
 
+    if (
+      bargainTargetBoard.sellerId &&
+      bargainTargetBoard.sellerId === currentUser.id
+    ) {
+      return;
+    }
+
     const isComponentBargain = Boolean(bargainTargetComponent);
     const targetDisplayName = bargainTargetComponent
       ? `${bargainTargetComponent.partNumber} (${bargainTargetBoard.boardName})`
       : bargainTargetBoard.boardName;
+
+    const clampedOffer = Math.min(
+      bargainMaxPrice,
+      Math.max(bargainMinPrice, bargainOfferAmount)
+    );
 
     submitBargainOffer({
       boardId: bargainTargetBoard.id,
@@ -325,18 +338,21 @@ export const MarketplacePortal: React.FC = () => {
         : bargainTargetBoard.id,
       boardName: targetDisplayName,
       buyerId: currentUser.id,
+      buyerEmail: currentUser.email,
       buyerName: currentUser.fullName || 'Verified Buyer',
       buyerPhone: currentUser.phone || '+91 98401 23456',
       buyerDistrict: currentUser.district || 'Chennai',
+      sellerId: bargainTargetBoard.sellerId,
+      sellerEmail: bargainTargetBoard.sellerEmail,
       sellerName: bargainTargetBoard.sellerName,
       sellerPhone: bargainTargetBoard.sellerPhone || '+91 98401 23456',
       sellerDistrict: bargainTargetBoard.sellerDistrict || 'Chennai',
       originalPriceInr: bargainOriginalPrice,
-      offeredPriceInr: bargainOfferAmount,
+      offeredPriceInr: clampedOffer,
       note: bargainNote.trim(),
     });
     setBargainSuccessMsg(
-      `Bargain offer of ₹${bargainOfferAmount} for ${targetDisplayName} submitted to ${bargainTargetBoard.sellerName}! Track it under "My Orders & Bargains".`
+      `Bargain offer of ₹${clampedOffer} for ${targetDisplayName} submitted to ${bargainTargetBoard.sellerName}! Track it under "My Orders & Bargains".`
     );
     setTimeout(() => {
       setBargainSuccessMsg(null);
@@ -705,120 +721,137 @@ export const MarketplacePortal: React.FC = () => {
 
                   {/* Dual-Action Pricing Buttons */}
                   <div className="mt-6 pt-5 border-t border-slate-200/80 space-y-2.5">
-                    {!isSolderedOnly && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setModalTarget({
-                            board: parentBoard,
-                            component: comp,
-                            mode: 'EXTRACTED_TESTED_PART',
-                          });
-                        }}
-                        className="w-full min-h-[44px] py-3 px-4 rounded-2xl bg-[#0F172A] hover:bg-slate-800 text-white font-medium text-xs flex items-center justify-between active:scale-95 transition-all shadow-sm"
-                      >
-                        <span className="flex items-center gap-1.5 font-semibold">
-                          <Flame className="w-3.5 h-3.5 text-amber-400" />
-                          {isReadyToUse ? 'Buy Ready-to-Use' : 'Buy Extracted'}
-                        </span>
-                        <span className="font-mono font-semibold text-emerald-300">
-                          {isReadyToUse
-                            ? `₹${comp.partPriceInr} (₹0 QC fee)`
-                            : `₹${comp.partPriceInr} + ₹${effectiveExtractionFee} fee`}
-                        </span>
-                      </button>
-                    )}
-
-                    <button
-                      disabled={!isRawAvailable}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setModalTarget({
-                          board: parentBoard,
-                          component: comp,
-                          mode: 'RAW_DONOR_BOARD',
-                        });
-                      }}
-                      className={`w-full min-h-[44px] py-3 px-4 rounded-2xl text-xs flex items-center justify-between border transition-all ${
-                        isRawAvailable
-                          ? isSolderedOnly
-                            ? 'bg-[#0F172A] hover:bg-slate-800 text-white border-slate-900 active:scale-95 font-semibold'
-                            : 'bg-slate-100/80 hover:bg-slate-200/70 text-[#0F172A] border-slate-200/90 active:scale-95'
-                          : 'bg-slate-50 text-slate-400 border-slate-200/50 cursor-not-allowed'
-                      }`}
-                    >
-                      <span className="flex items-center gap-1.5 font-medium">
-                        {isRawAvailable ? (
-                          <Layers className="w-3.5 h-3.5 text-emerald-500" />
-                        ) : (
-                          <Lock className="w-3.5 h-3.5 text-slate-400" />
-                        )}
-                        Buy Full Raw Board
-                      </span>
-                      <span className="font-mono font-medium">
-                        {isRawAvailable
-                          ? `₹${parentBoard.rawBoardPriceInr} (As-Is)`
-                          : 'Partially Harvested'}
-                      </span>
-                    </button>
-
-                    {!isSolderedOnly && (
+                    {parentBoard.sellerId &&
+                    parentBoard.sellerId === currentUser.id ? (
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          toggleCartItem(comp.id);
+                          setActiveTab('SELLER_PORTAL');
                         }}
-                        className={`w-full min-h-[44px] py-2.5 px-4 rounded-2xl text-xs font-medium flex items-center justify-center gap-1.5 border active:scale-95 transition-all ${
-                          bulkCartIds.includes(comp.id)
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold'
-                            : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
-                        }`}
+                        className="w-full min-h-[44px] py-3 px-4 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold text-xs flex items-center justify-center gap-2 active:scale-95 transition-all"
                       >
-                        {bulkCartIds.includes(comp.id) ? (
-                          <>
-                            <Check className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>In Bulk Cart (Click to Remove)</span>
-                          </>
-                        ) : (
-                          <>
-                            <ShoppingBag className="w-3.5 h-3.5 text-slate-500" />
-                            <span>+ Add to Bulk Component Cart</span>
-                          </>
+                        <CheckCircle className="w-4 h-4 text-emerald-600" />
+                        <span>Your Listing • Manage in Seller Hub</span>
+                      </button>
+                    ) : (
+                      <>
+                        {!isSolderedOnly && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setModalTarget({
+                                board: parentBoard,
+                                component: comp,
+                                mode: 'EXTRACTED_TESTED_PART',
+                              });
+                            }}
+                            className="w-full min-h-[44px] py-3 px-4 rounded-2xl bg-[#0F172A] hover:bg-slate-800 text-white font-medium text-xs flex items-center justify-between active:scale-95 transition-all shadow-sm"
+                          >
+                            <span className="flex items-center gap-1.5 font-semibold">
+                              <Flame className="w-3.5 h-3.5 text-amber-400" />
+                              {isReadyToUse ? 'Buy Ready-to-Use' : 'Buy Extracted'}
+                            </span>
+                            <span className="font-mono font-semibold text-emerald-300">
+                              {isReadyToUse
+                                ? `₹${comp.partPriceInr} (₹0 QC fee)`
+                                : `₹${comp.partPriceInr} + ₹${effectiveExtractionFee} fee`}
+                            </span>
+                          </button>
                         )}
-                      </button>
-                    )}
 
-                    {parentBoard.allowBargain && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setBargainTargetBoard(parentBoard);
-                          setBargainTargetComponent(
-                            isSolderedOnly ? null : comp
-                          );
-                          const basePrice = isSolderedOnly
-                            ? parentBoard.rawBoardPriceInr
-                            : comp.partPriceInr;
-                          setBargainOfferAmount(
-                            Math.max(10, Math.round(basePrice * 0.85))
-                          );
-                          setBargainNote(
-                            `Inquiring about ${comp.partNumber} (${parentBoard.boardName})`
-                          );
-                        }}
-                        className="w-full min-h-[40px] py-2 px-3 rounded-2xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-xs"
-                      >
-                        <TrendingDown className="w-3.5 h-3.5 text-amber-600" />
-                        <span>
-                          Bargain Price (₹
-                          {isSolderedOnly
-                            ? parentBoard.rawBoardPriceInr
-                            : comp.partPriceInr}
-                          )
-                        </span>
-                      </button>
+                        <button
+                          disabled={!isRawAvailable}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setModalTarget({
+                              board: parentBoard,
+                              component: comp,
+                              mode: 'RAW_DONOR_BOARD',
+                            });
+                          }}
+                          className={`w-full min-h-[44px] py-3 px-4 rounded-2xl text-xs flex items-center justify-between border transition-all ${
+                            isRawAvailable
+                              ? isSolderedOnly
+                                ? 'bg-[#0F172A] hover:bg-slate-800 text-white border-slate-900 active:scale-95 font-semibold'
+                                : 'bg-slate-100/80 hover:bg-slate-200/70 text-[#0F172A] border-slate-200/90 active:scale-95'
+                              : 'bg-slate-50 text-slate-400 border-slate-200/50 cursor-not-allowed'
+                          }`}
+                        >
+                          <span className="flex items-center gap-1.5 font-medium">
+                            {isRawAvailable ? (
+                              <Layers className="w-3.5 h-3.5 text-emerald-500" />
+                            ) : (
+                              <Lock className="w-3.5 h-3.5 text-slate-400" />
+                            )}
+                            Buy Full Raw Board
+                          </span>
+                          <span className="font-mono font-medium">
+                            {isRawAvailable
+                              ? `₹${parentBoard.rawBoardPriceInr} (As-Is)`
+                              : 'Partially Harvested'}
+                          </span>
+                        </button>
+
+                        {!isSolderedOnly && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleCartItem(comp.id);
+                            }}
+                            className={`w-full min-h-[44px] py-2.5 px-4 rounded-2xl text-xs font-medium flex items-center justify-center gap-1.5 border active:scale-95 transition-all ${
+                              bulkCartIds.includes(comp.id)
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold'
+                                : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
+                            }`}
+                          >
+                            {bulkCartIds.includes(comp.id) ? (
+                              <>
+                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>In Bulk Cart (Click to Remove)</span>
+                              </>
+                            ) : (
+                              <>
+                                <ShoppingBag className="w-3.5 h-3.5 text-slate-500" />
+                                <span>+ Add to Bulk Component Cart</span>
+                              </>
+                            )}
+                          </button>
+                        )}
+
+                        {parentBoard.allowBargain && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setBargainTargetBoard(parentBoard);
+                              setBargainTargetComponent(
+                                isSolderedOnly ? null : comp
+                              );
+                              const basePrice = isSolderedOnly
+                                ? parentBoard.rawBoardPriceInr
+                                : comp.partPriceInr;
+                              setBargainOfferAmount(
+                                Math.max(10, Math.round(basePrice * 0.85))
+                              );
+                              setBargainNote(
+                                `Inquiring about ${comp.partNumber} (${parentBoard.boardName})`
+                              );
+                            }}
+                            className="w-full min-h-[40px] py-2 px-3 rounded-2xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-xs"
+                          >
+                            <TrendingDown className="w-3.5 h-3.5 text-amber-600" />
+                            <span>
+                              Bargain Price (₹
+                              {isSolderedOnly
+                                ? parentBoard.rawBoardPriceInr
+                                : comp.partPriceInr}
+                              )
+                            </span>
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
                 </Card3D>
@@ -1047,65 +1080,81 @@ export const MarketplacePortal: React.FC = () => {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                    {board.allowBargain && (
+                    {board.sellerId && board.sellerId === currentUser.id ? (
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setBargainTargetBoard(board);
-                          setBargainTargetComponent(null);
-                          setBargainOfferAmount(
-                            Math.max(10, Math.round(board.rawBoardPriceInr * 0.85))
-                          );
-                          setBargainNote(
-                            `Proposing bargain on ${board.boardName}`
-                          );
+                          setActiveTab('SELLER_PORTAL');
                         }}
-                        className="min-h-[44px] px-3.5 py-2 rounded-full border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+                        className="w-full sm:w-auto min-h-[44px] px-4 py-2 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all"
                       >
-                        <TrendingDown className="w-3.5 h-3.5 text-amber-600" />
-                        <span>Bargain</span>
+                        <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Your Listing • Manage in Seller Hub</span>
                       </button>
+                    ) : (
+                      <>
+                        {board.allowBargain && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setBargainTargetBoard(board);
+                              setBargainTargetComponent(null);
+                              setBargainOfferAmount(
+                                Math.max(10, Math.round(board.rawBoardPriceInr * 0.85))
+                              );
+                              setBargainNote(
+                                `Proposing bargain on ${board.boardName}`
+                              );
+                            }}
+                            className="min-h-[44px] px-3.5 py-2 rounded-full border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+                          >
+                            <TrendingDown className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Bargain</span>
+                          </button>
+                        )}
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setModalTarget({
+                              board,
+                              component: intactChildComps[0] || null,
+                              mode:
+                                board.hardwareMode === 'SOLDERED_RAW'
+                                  ? 'RAW_DONOR_BOARD'
+                                  : 'EXTRACTED_TESTED_PART',
+                            });
+                          }}
+                          className="flex-1 sm:flex-none min-h-[44px] px-4 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200 text-[#0F172A] border border-slate-200 text-xs font-medium flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Inspect PCB Map</span>
+                        </button>
+
+                        <button
+                          disabled={!isRawAvailable}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setModalTarget({
+                              board,
+                              component: intactChildComps[0] || null,
+                              mode: 'RAW_DONOR_BOARD',
+                            });
+                          }}
+                          className={`flex-1 sm:flex-none min-h-[44px] px-4 py-2.5 rounded-full font-mono text-xs font-semibold active:scale-95 transition-all ${
+                            isRawAvailable
+                              ? 'bg-[#0F172A] hover:bg-slate-800 text-white'
+                              : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                          }`}
+                        >
+                          {isRawAvailable
+                            ? `Buy Raw ₹${board.rawBoardPriceInr}`
+                            : board.status}
+                        </button>
+                      </>
                     )}
-
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setModalTarget({
-                          board,
-                          component: intactChildComps[0] || null,
-                          mode:
-                            board.hardwareMode === 'SOLDERED_RAW'
-                              ? 'RAW_DONOR_BOARD'
-                              : 'EXTRACTED_TESTED_PART',
-                        });
-                      }}
-                      className="flex-1 sm:flex-none min-h-[44px] px-4 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200 text-[#0F172A] border border-slate-200 text-xs font-medium flex items-center justify-center gap-1.5 active:scale-95 transition-all"
-                    >
-                      <Eye className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Inspect PCB Map</span>
-                    </button>
-
-                    <button
-                      disabled={!isRawAvailable}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setModalTarget({
-                          board,
-                          component: intactChildComps[0] || null,
-                          mode: 'RAW_DONOR_BOARD',
-                        });
-                      }}
-                      className={`flex-1 sm:flex-none min-h-[44px] px-4 py-2.5 rounded-full font-mono text-xs font-semibold active:scale-95 transition-all ${
-                        isRawAvailable
-                          ? 'bg-[#0F172A] hover:bg-slate-800 text-white'
-                          : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                      }`}
-                    >
-                      {isRawAvailable
-                        ? `Buy Raw ₹${board.rawBoardPriceInr}`
-                        : board.status}
-                    </button>
                   </div>
                 </div>
               </Card3D>
@@ -1251,6 +1300,7 @@ export const MarketplacePortal: React.FC = () => {
                       type="text"
                       value={bulkBuyerName}
                       onChange={(e) => setBulkBuyerName(e.target.value)}
+                      placeholder="Enter recipient name"
                       className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border border-slate-200 text-base sm:text-xs text-[#0F172A] focus:outline-none"
                     />
                   </div>
@@ -1275,6 +1325,36 @@ export const MarketplacePortal: React.FC = () => {
                         </option>
                       ))}
                     </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                      10-Digit Mobile Number
+                    </label>
+                    <input
+                      type="tel"
+                      maxLength={10}
+                      value={bulkBuyerPhone}
+                      onChange={(e) =>
+                        setBulkBuyerPhone(e.target.value.replace(/\D/g, ''))
+                      }
+                      placeholder="9840012345"
+                      className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border border-slate-200 text-base sm:text-xs font-mono text-[#0F172A] focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                      Shipping Street Address
+                    </label>
+                    <input
+                      type="text"
+                      value={bulkBuyerAddress}
+                      onChange={(e) => setBulkBuyerAddress(e.target.value)}
+                      placeholder="Shop / Street / Landmark"
+                      className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border border-slate-200 text-base sm:text-xs text-[#0F172A] focus:outline-none"
+                    />
                   </div>
                 </div>
 
@@ -1316,35 +1396,24 @@ export const MarketplacePortal: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    bulkCartComponents.forEach((c, idx) => {
-                      const b = boardMap.get(c.donorBoardId);
-                      const effExt =
-                        b?.hardwareMode === 'READY_TO_USE'
-                          ? 0
-                          : c.extractionFeeInr;
-                      const itemComm =
-                        idx === 0 ? bulkCartSummary.unifiedCommissionInr : 0;
-                      const itemShip =
-                        idx === 0 ? bulkCartSummary.bundledShippingInr : 0;
-                      placeOrder({
-                        buyerName: bulkBuyerName || 'Laptop Shop Owner',
-                        buyerPhone: bulkBuyerPhone || '9840012345',
-                        buyerAddress: bulkBuyerAddress || 'Ritchie Street',
-                        buyerState: 'Tamil Nadu',
-                        buyerDistrict: bulkBuyerDistrict,
-                        buyerPincode: '600002',
-                        donorBoardId: c.donorBoardId,
-                        componentId: c.id,
-                        mode: 'EXTRACTED_TESTED_PART',
-                        deliveryType: bulkCartSummary.allSameDistrict
-                          ? 'HYPERLOCAL_RAPIDO'
-                          : 'OUTSTATION_PARCEL',
-                        logisticsPartner: bulkCartSummary.bundledLogisticsLabel,
-                        platformCommissionInr: itemComm,
-                        deliveryFeeInr: itemShip,
-                        totalPriceInr: c.partPriceInr + effExt + itemComm + itemShip,
-                        upiUtrOrPaymentId: bulkUtr || '429104829104',
-                      });
+                    const cleanDigits = (bulkBuyerPhone || currentUser.phone || '9840012345')
+                      .replace(/\D/g, '')
+                      .slice(-10);
+                    placeBulkCartOrder({
+                      componentIds: bulkCartComponents.map((c) => c.id),
+                      buyerName:
+                        bulkBuyerName.trim() ||
+                        currentUser.fullName ||
+                        'Verified Buyer',
+                      buyerPhone: `+91 ${cleanDigits || '9840012345'}`,
+                      buyerAddress:
+                        bulkBuyerAddress.trim() ||
+                        currentUser.defaultAddress ||
+                        'Ritchie Street Electronics Hub',
+                      buyerDistrict: bulkBuyerDistrict,
+                      upiUtrOrPaymentId: bulkUtr
+                        ? `UTR-${bulkUtr.replace(/\D/g, '').slice(-12)}`
+                        : 'UTR-429104829104',
                     });
                     setBulkCartIds([]);
                     setShowBulkCartModal(false);
@@ -1352,7 +1421,7 @@ export const MarketplacePortal: React.FC = () => {
                   }}
                   className="w-full min-h-[48px] py-3 rounded-2xl bg-[#0F172A] hover:bg-slate-800 text-white font-semibold text-xs active:scale-95 transition-all"
                 >
-                  Confirm Bulk Cart Order (₹{bulkCartSummary.grandTotalInr}) →
+                  Confirm Atomic Bulk Cart Order (₹{bulkCartSummary.grandTotalInr}) →
                 </button>
               </div>
             </div>
@@ -1438,7 +1507,7 @@ export const MarketplacePortal: React.FC = () => {
                   <input
                     type="range"
                     min={bargainMinPrice}
-                    max={bargainOriginalPrice}
+                    max={bargainMaxPrice}
                     step={1}
                     value={bargainOfferAmount}
                     onChange={(e) =>
@@ -1448,7 +1517,7 @@ export const MarketplacePortal: React.FC = () => {
                   />
 
                   <div className="flex justify-between text-[11px] font-mono text-slate-400">
-                    <span>Min: ₹{bargainMinPrice}</span>
+                    <span>Min (50%): ₹{bargainMinPrice}</span>
                     <span className="text-emerald-700 font-bold">
                       Discount:{' '}
                       {Math.max(
@@ -1461,7 +1530,7 @@ export const MarketplacePortal: React.FC = () => {
                       )}
                       % Off
                     </span>
-                    <span>Max: ₹{bargainOriginalPrice}</span>
+                    <span>Max: ₹{bargainMaxPrice}</span>
                   </div>
                 </div>
 

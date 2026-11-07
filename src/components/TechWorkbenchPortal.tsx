@@ -38,10 +38,17 @@ export const TechWorkbenchPortal: React.FC = () => {
   >({});
   const [esdModalOrder, setEsdModalOrder] = useState<Order | null>(null);
 
-  const pendingJobs = orders.filter((o) => o.status === 'PENDING_EXTRACTION');
+  const pendingJobs = orders.filter(
+    (o) =>
+      o.status === 'PENDING_EXTRACTION' &&
+      o.mode === 'EXTRACTED_TESTED_PART' &&
+      (o.extractionFeeInr ?? 0) > 0
+  );
   const completedExtractions = orders.filter(
     (o) =>
-      o.mode === 'EXTRACTED_TESTED_PART' && o.status !== 'PENDING_EXTRACTION'
+      o.mode === 'EXTRACTED_TESTED_PART' &&
+      (o.extractionFeeInr ?? 0) > 0 &&
+      o.status !== 'PENDING_EXTRACTION'
   );
 
   const handleReadingChange = (orderId: string, val: string) => {
