@@ -385,6 +385,14 @@ export const MarketplacePortal: React.FC = () => {
           intactComponentsCount={
             components.filter((c) => c.status === 'INTACT').length
           }
+          onSelectCategory={(catKey) => {
+            if (catKey === 'ICS_MCUS') setSelectedCategory('IC_MICROCONTROLLERS');
+            else if (catKey === 'APPLIANCE_PCBS') setSelectedCategory('WASHING_MACHINE_APPLIANCE');
+            else if (catKey === 'LI_ION_CELLS') setSelectedCategory('BATTERIES_POWER_CELLS');
+            else if (catKey === 'SMPS_POWER') setSelectedCategory('SMPS_POWER_INVERTERS');
+            const el = document.getElementById('catalog-search-bar');
+            el?.scrollIntoView({ behavior: 'smooth' });
+          }}
           onSelectPillar={(pillar) => {
             if (pillar === 'SELL') setActiveTab('SELLER_PORTAL');
             else if (pillar === 'PROCURE') {
