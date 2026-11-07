@@ -11,6 +11,7 @@ import { OrdersTrackerPortal } from './components/OrdersTrackerPortal';
 import { ImpactAnalyticsPortal } from './components/ImpactAnalyticsPortal';
 import { SupportContactPortal } from './components/SupportContactPortal';
 import { LoginPage } from './components/LoginPage';
+import { AuthView } from './components/AuthView';
 import { MembershipPortal } from './components/MembershipPortal';
 import { OwnerAdminPortal } from './components/OwnerAdminPortal';
 import { FounderVaultModal } from './components/FounderVaultModal';
@@ -31,7 +32,9 @@ const MainShell: React.FC = () => {
       <Header />
 
       <main className="relative flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-10 pb-16 sm:pb-20">
-        {activeTab === 'LOGIN' && <LoginPage />}
+        {activeTab === 'LOGIN' && (
+          <AuthView onSuccess={() => setActiveTab('MARKETPLACE')} />
+        )}
         {activeTab === 'MARKETPLACE' && <MarketplacePortal />}
         {activeTab === 'SELLER_PORTAL' && <SellerPortal />}
         {activeTab === 'TECH_WORKBENCH' && <TechWorkbenchPortal />}

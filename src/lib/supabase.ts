@@ -18,6 +18,24 @@ import {
 const RUNTIME_URL_KEY = 'silicon_harvest_supabase_url';
 const RUNTIME_KEY_KEY = 'silicon_harvest_supabase_anon_key';
 
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('CRITICAL: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY must be configured in Vercel environment variables.');
+}
+
+export const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'placeholder-key',
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+    }
+  }
+);
+
 let cachedClient: SupabaseClient | null = null;
 let cachedConfigHash = '';
 
