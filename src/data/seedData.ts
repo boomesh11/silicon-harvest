@@ -29,7 +29,7 @@ export const INITIAL_DONOR_BOARDS: DonorBoard[] = [
     isVerified: true,
     status: 'AVAILABLE',
     totalComponentsCount: 3,
-    imageUrl: 'https://images.unsplash.com/photo-1553406830-ef2513450d76?auto=format&fit=crop&w=600&q=80',
+    imageUrl: '/assets/3d/cat-ic.png',
     createdAt: new Date(Date.now() - 3600000 * 24).toISOString(),
   },
   {
@@ -54,7 +54,7 @@ export const INITIAL_DONOR_BOARDS: DonorBoard[] = [
     isVerified: true,
     status: 'AVAILABLE',
     totalComponentsCount: 4,
-    imageUrl: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80',
+    imageUrl: '/assets/3d/cat-appliance.png',
     createdAt: new Date(Date.now() - 3600000 * 18).toISOString(),
   },
   {
@@ -79,7 +79,7 @@ export const INITIAL_DONOR_BOARDS: DonorBoard[] = [
     isVerified: true,
     status: 'AVAILABLE',
     totalComponentsCount: 2,
-    imageUrl: 'https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&w=600&q=80',
+    imageUrl: '/assets/3d/cat-battery.png',
     createdAt: new Date(Date.now() - 3600000 * 12).toISOString(),
   },
   {
@@ -104,7 +104,7 @@ export const INITIAL_DONOR_BOARDS: DonorBoard[] = [
     isVerified: true,
     status: 'AVAILABLE',
     totalComponentsCount: 3,
-    imageUrl: 'https://images.unsplash.com/photo-1597740985671-2a8a3b80532e?auto=format&fit=crop&w=600&q=80',
+    imageUrl: '/assets/3d/cat-smps.png',
     createdAt: new Date(Date.now() - 3600000 * 8).toISOString(),
   },
   {
@@ -129,7 +129,7 @@ export const INITIAL_DONOR_BOARDS: DonorBoard[] = [
     isVerified: true,
     status: 'AVAILABLE',
     totalComponentsCount: 3,
-    imageUrl: 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80',
+    imageUrl: '/assets/3d/cat-laptop.png',
     createdAt: new Date(Date.now() - 3600000 * 6).toISOString(),
   },
   {
@@ -154,7 +154,7 @@ export const INITIAL_DONOR_BOARDS: DonorBoard[] = [
     isVerified: true,
     status: 'AVAILABLE',
     totalComponentsCount: 2,
-    imageUrl: 'https://images.unsplash.com/photo-1581092335397-9583fe92d232?auto=format&fit=crop&w=600&q=80',
+    imageUrl: '/assets/3d/cat-motor.png',
     createdAt: new Date(Date.now() - 3600000 * 4).toISOString(),
   },
   {
@@ -179,7 +179,7 @@ export const INITIAL_DONOR_BOARDS: DonorBoard[] = [
     isVerified: true,
     status: 'AVAILABLE',
     totalComponentsCount: 2,
-    imageUrl: 'https://images.unsplash.com/photo-1546776310-eef45dd6d63c?auto=format&fit=crop&w=600&q=80',
+    imageUrl: '/assets/3d/hero-pcb.png',
     createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
   },
 ];

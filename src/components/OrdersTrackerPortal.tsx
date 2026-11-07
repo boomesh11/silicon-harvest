@@ -105,6 +105,7 @@ Delivery & ESD Packing : Rs. ${deliveryInr}.00
 --------------------------------------------------------------------
 TOTAL AMOUNT PAID      : Rs. ${order.totalPayableInr}.00
 ====================================================================
+Founder & Support Desk : Boomesh R K | rkboomesh@gmail.com | +91 7200255069
 Certified by SiliconHarvest ESD & Chip-Level Salvage Network
 `;
 

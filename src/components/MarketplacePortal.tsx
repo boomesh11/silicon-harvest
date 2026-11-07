@@ -32,7 +32,7 @@ import {
 import { InspectionCheckoutModal } from './InspectionCheckoutModal';
 import { DatasheetPinoutModal } from './DatasheetPinoutModal';
 import { Hardware3DStage } from './Hardware3DStage';
-import { Tilt3DCard } from './Tilt3DCard';
+import { Card3D } from './Card3D';
 import {
   CATALOG_CATEGORIES,
   CatalogCategory,
@@ -529,7 +529,7 @@ export const MarketplacePortal: React.FC = () => {
               );
 
               return (
-                <Tilt3DCard
+                <Card3D
                   key={comp.id}
                   onClick={() =>
                     setModalTarget({
@@ -822,7 +822,7 @@ export const MarketplacePortal: React.FC = () => {
                       </button>
                     )}
                   </div>
-                </Tilt3DCard>
+                </Card3D>
               );
             })}
           </div>
@@ -873,7 +873,7 @@ export const MarketplacePortal: React.FC = () => {
             );
 
             return (
-              <Tilt3DCard
+              <Card3D
                 key={board.id}
                 onClick={() =>
                   setModalTarget({
@@ -1110,7 +1110,7 @@ export const MarketplacePortal: React.FC = () => {
                     </button>
                   </div>
                 </div>
-              </Tilt3DCard>
+              </Card3D>
             );
           })}
         </div>

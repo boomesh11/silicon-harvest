@@ -338,3 +338,4 @@ export function computeEffectiveDistanceKm(
     .reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
   return 120 + (hash % 360);
 }
+

@@ -151,9 +151,9 @@ export const OwnerAdminPortal: React.FC = () => {
               <p className="text-xs sm:text-sm text-slate-400">
                 Logged in as{' '}
                 <strong className="text-white">
-                  {currentUser.fullName || 'Founder Admin'}
+                  {currentUser.fullName || 'Boomesh R K (Founder & Admin)'}
                 </strong>{' '}
-                ({currentUser.email || 'founder@siliconharvest.org'})
+                ({currentUser.email || 'rkboomesh@gmail.com'} • +91 7200255069)
               </p>
             </div>
 

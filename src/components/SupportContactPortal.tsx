@@ -46,7 +46,7 @@ export const SupportContactPortal: React.FC = () => {
     },
     {
       q: 'What if I am ordering from another district or state?',
-      a: 'Outstation orders are sealed in an ESD Anti-Static protective pouch and dispatched via India Post Speed Post (₹49 flat) or Delhivery Surface Express (₹69 flat) with live AWB tracking and 2-4 day delivery across Tamil Nadu and all of India.',
+      a: 'Outstation orders are sealed in an ESD Anti-Static protective pouch and dispatched via India Post Speed Post (₹45 flat) or Delhivery Surface Express (₹65 flat) with live AWB tracking and 2-4 day delivery across Tamil Nadu and all of India.',
     },
     {
       q: 'Can I sell my college project or broken repair shop PCBs here?',
@@ -111,7 +111,7 @@ export const SupportContactPortal: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* WhatsApp Card */}
         <a
-          href="https://wa.me/919840000000?text=Hi%20SiliconHarvest%20Support%2C%20I%20need%20assistance%20with%20my%20order."
+          href="https://wa.me/917200255069?text=Hi%20Boomesh%20R%20K%20(SiliconHarvest%20Support)%2C%20I%20need%20assistance%20with%20my%20order."
           target="_blank"
           rel="noopener noreferrer"
           className="p-5 rounded-3xl bg-emerald-500 hover:bg-emerald-600 text-white shadow-sm flex flex-col justify-between transition-all group"
@@ -120,27 +120,29 @@ export const SupportContactPortal: React.FC = () => {
             <span className="text-xl">💬</span>
             <h3 className="font-bold text-sm tracking-tight">WhatsApp Priority Desk</h3>
             <p className="text-xs text-emerald-50 opacity-90 leading-relaxed">
-              Instant assistance for courier live tracking & multimeter test reports.
+              Direct WhatsApp support with Founder Boomesh R K (+91 7200255069).
             </p>
           </div>
           <span className="text-xs font-semibold underline mt-4 block group-hover:translate-x-0.5 transition-transform">
-            Chat on WhatsApp ➔
+            Chat on WhatsApp (+91 7200255069) ➔
           </span>
         </a>
 
         {/* Helpline Card */}
         <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-2">
           <span className="text-xl">📞</span>
-          <h3 className="font-bold text-sm text-[#1D1D1F]">Customer Care Helpline</h3>
-          <p className="text-xs text-slate-500 font-mono font-semibold">+91 98400 12345</p>
+          <h3 className="font-bold text-sm text-[#1D1D1F]">Founder &amp; Customer Care</h3>
+          <p className="text-xs text-slate-800 font-semibold">Boomesh R K</p>
+          <p className="text-xs text-emerald-700 font-mono font-bold">+91 7200255069</p>
           <p className="text-[11px] text-slate-400">Monday – Saturday: 9:00 AM – 8:00 PM IST</p>
         </div>
 
         {/* Official Email Card */}
         <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-2">
           <span className="text-xl">✉️</span>
-          <h3 className="font-bold text-sm text-[#1D1D1F]">Email Support Desk</h3>
-          <p className="text-xs text-slate-500 font-mono font-semibold">support@siliconharvest.in</p>
+          <h3 className="font-bold text-sm text-[#1D1D1F]">Official Email Desk</h3>
+          <p className="text-xs text-slate-800 font-semibold">Boomesh R K (Founder)</p>
+          <p className="text-xs text-emerald-700 font-mono font-bold">rkboomesh@gmail.com</p>
           <p className="text-[11px] text-slate-400">Guaranteed response within 4 business hours</p>
         </div>
       </div>

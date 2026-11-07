@@ -20,3 +20,4 @@ description: Enforces non-AI-looking, spatial 3D hardware engineering UI (Spline
   - NEVER use `value || fallback` for numeric currency fields where `0` is valid (such as `platformCommissionInr ?? 0`). Always use `??`.
 - **Scoped & Single-Use Bargains:**
   - Every bargain offer MUST record `targetType: 'BOARD' | 'COMPONENT'`, `targetId`, and `buyerId`. An accepted bargain can only be applied by that exact `buyerId` on that exact `targetId`, and transitions to `'REDEEMED'` immediately upon `placeOrder()`.
+

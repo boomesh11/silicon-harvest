@@ -21,6 +21,7 @@ import { useHarvestStore } from '../store/useHarvestStore';
 import { UserRole } from '../types/harvest';
 import { INDIAN_STATES_DISTRICTS } from '../data/catalogPricing';
 import { GOOGLE_OAUTH_ENABLED } from '../services/harvestApi';
+import { Hero3DCanvas } from './Hero3DCanvas';
 
 export const LoginPage: React.FC = () => {
   const {
@@ -31,7 +32,6 @@ export const LoginPage: React.FC = () => {
     verifyPhoneOtp,
     signInWithGoogle,
     quickGoogleSignIn,
-    switchOwnerAdmin,
     updateUserProfile,
     setActiveTab,
   } = useHarvestStore();
@@ -352,22 +352,27 @@ export const LoginPage: React.FC = () => {
               </p>
             </div>
 
+            {/* 3D Hardware Preview Stage */}
+            <div className="pt-1">
+              <Hero3DCanvas compact />
+            </div>
+
             {/* 3 Trust Badges */}
-            <div className="space-y-3.5 pt-2">
-              <div className="p-4 rounded-2xl bg-white/90 border border-slate-200/80 shadow-xs flex items-start gap-3">
+            <div className="space-y-3 pt-1">
+              <div className="p-3.5 rounded-2xl bg-white/90 border border-slate-200/80 shadow-xs flex items-start gap-3">
                 <span className="text-base leading-none mt-0.5">⚡</span>
                 <div>
                   <div className="text-xs font-semibold text-[#1D1D1F]">
-                    Same-District Rapido &amp; Dunzo Hyperlocal Delivery
+                    Same-District Rapido &amp; Porter Hyperlocal Delivery
                   </div>
                   <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
-                    45-minute bike parcel across your district (₹39) or flat ₹49
+                    45-minute bike parcel across your district (₹35) or flat ₹45
                     India Post Speed Post nationwide.
                   </p>
                 </div>
               </div>
 
-              <div className="p-4 rounded-2xl bg-white/90 border border-slate-200/80 shadow-xs flex items-start gap-3">
+              <div className="p-3.5 rounded-2xl bg-white/90 border border-slate-200/80 shadow-xs flex items-start gap-3">
                 <span className="text-base leading-none mt-0.5">🛡️</span>
                 <div>
                   <div className="text-xs font-semibold text-[#1D1D1F]">
@@ -380,7 +385,7 @@ export const LoginPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="p-4 rounded-2xl bg-white/90 border border-slate-200/80 shadow-xs flex items-start gap-3">
+              <div className="p-3.5 rounded-2xl bg-white/90 border border-slate-200/80 shadow-xs flex items-start gap-3">
                 <span className="text-base leading-none mt-0.5">🌿</span>
                 <div>
                   <div className="text-xs font-semibold text-[#1D1D1F]">
@@ -397,9 +402,8 @@ export const LoginPage: React.FC = () => {
 
           {/* Bottom Guest Preview Link */}
           <div className="pt-4 border-t border-slate-200/70 flex items-center justify-between text-xs text-slate-500">
-            <span className="flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Apple Daylight Production Release</span>
+            <span className="font-mono text-[11px] text-slate-600">
+              Founder Support: +91 7200255069
             </span>
             <button
               type="button"
@@ -415,16 +419,6 @@ export const LoginPage: React.FC = () => {
         {/* RIGHT / BOTTOM INTERACTIVE AUTH FORM */}
         <div className="lg:col-span-7 p-8 sm:p-10 lg:p-12 flex flex-col justify-center">
           <div className="max-w-md w-full mx-auto space-y-6">
-            {/* Quick 1-Click Founder & Owner Access */}
-            <button
-              type="button"
-              onClick={() => switchOwnerAdmin()}
-              className="w-full min-h-[44px] rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-400/20 to-amber-500/15 hover:from-amber-500/25 hover:to-amber-500/25 border border-amber-400/50 p-3 flex items-center justify-center gap-2 text-amber-900 font-bold text-xs sm:text-sm active:scale-95 transition-all shadow-sm"
-            >
-              <Crown className="w-4 h-4 text-amber-600" />
-              <span>👑 Switch to Owner / Founder Admin View (1-Click)</span>
-            </button>
-
             {/* Segmented Tab Switcher: [ Sign In ] vs [ Create Account ] */}
             <div className="bg-slate-100 p-1.5 rounded-2xl border border-slate-200/80 grid grid-cols-2 gap-1">
               <button
@@ -553,7 +547,7 @@ export const LoginPage: React.FC = () => {
                     required
                     value={googleName}
                     onChange={(e) => setGoogleName(e.target.value)}
-                    placeholder="Siddharth V."
+                    placeholder="Enter your full name"
                     className="w-full min-h-[44px] px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-base sm:text-xs text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                   />
                 </div>
@@ -821,7 +815,7 @@ export const LoginPage: React.FC = () => {
                       District Logistics Setup
                     </span>
                     <span className="text-[10px] font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                      Unlocks ₹39 Rapido / ₹49 Speed Post
+                      Unlocks ₹35 Rapido / ₹45 Speed Post
                     </span>
                   </div>
 

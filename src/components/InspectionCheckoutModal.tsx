@@ -116,6 +116,7 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
     }
   }, [isSameDistrict, logisticsPartner]);
 
+  const [paymentMethod, setPaymentMethod] = useState<'UPI_INSTANT' | 'COD_ON_PICKUP'>('UPI_INSTANT');
   const [upiUtrInput, setUpiUtrInput] = useState('');
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [placedOrder, setPlacedOrder] = useState<Order | null>(null);
@@ -162,11 +163,12 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
 
   const activeBypassTips = boardComponents.filter((c) => c.bypassHackTip);
 
-  const merchantUpiVpa = 'siliconharvest@okaxis';
+  const merchantUpiVpa = '7200255069@upi';
+  const secondaryUpiVpa = 'rkboomesh@okaxis';
 
   const upiDeepLink = `upi://pay?pa=${encodeURIComponent(
     merchantUpiVpa
-  )}&pn=${encodeURIComponent('SiliconHarvest')}&am=${totalPayableInr}&cu=INR&tn=${encodeURIComponent(
+  )}&pn=${encodeURIComponent('Boomesh R K - SiliconHarvest')}&am=${totalPayableInr}&cu=INR&tn=${encodeURIComponent(
     'Hardware Salvage Checkout'
   )}`;
 
@@ -216,12 +218,17 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
     }
 
     const cleanedUtr = upiUtrInput.replace(/\D/g, '');
-    if (cleanedUtr.length !== 12) {
+    if (paymentMethod === 'UPI_INSTANT' && cleanedUtr.length !== 12) {
       setCheckoutError(
-        'Please enter the valid 12-digit numeric UPI UTR Reference ID from GPay / PhonePe / Paytm.'
+        'Please enter the valid 12-digit numeric UPI UTR Reference ID from GPay / PhonePe / Paytm, or select Cash / UPI on Pickup (COD).'
       );
       return;
     }
+
+    const resolvedPaymentRef =
+      paymentMethod === 'COD_ON_PICKUP'
+        ? 'COD-PAY-ON-PICKUP'
+        : `UTR-${cleanedUtr}`;
 
     const digitsOnly = buyerPhone.replace(/\D/g, '').slice(-10);
     const order = placeOrder({
@@ -241,7 +248,7 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
       logisticsPartner: partnerInfo.label,
       platformCommissionInr,
       deliveryFeeInr,
-      upiUtrOrPaymentId: `UTR-${cleanedUtr}`,
+      upiUtrOrPaymentId: resolvedPaymentRef,
       isProOrder: isPro,
       bargainDiscountInr,
       redeemedBargainId: breakdown.matchedBargain?.id,
@@ -397,8 +404,12 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                   </span>
                 </div>
                 <div className="border-t border-slate-200 pt-2 flex justify-between text-sm font-bold">
-                  <span className="text-[#0F172A]">Total Amount Paid:</span>
+                  <span className="text-[#0F172A]">Total Amount Payable:</span>
                   <span className="text-emerald-700">₹{placedOrder.totalPayableInr}</span>
+                </div>
+                <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-500 flex items-center justify-between">
+                  <span>Founder Support: Boomesh R K</span>
+                  <span className="text-emerald-700 font-semibold">+91 7200255069 • rkboomesh@gmail.com</span>
                 </div>
               </div>
 
@@ -981,83 +992,132 @@ export const InspectionCheckoutModal: React.FC<InspectionCheckoutModalProps> = (
                     </div>
                   </div>
 
-                  {/* UPI QR & 12-digit UTR verification */}
+                  {/* Payment Method Toggle: UPI Instant vs COD on Pickup */}
                   <div className="pt-2 border-t border-slate-200 space-y-3">
-                    <div className="flex flex-col sm:flex-row items-center gap-4 bg-white p-3.5 rounded-xl border border-slate-200">
-                      <div className="p-2 bg-white rounded-lg border border-slate-200 shrink-0 text-center">
-                        <img
-                          src={qrCodeUrl}
-                          alt="UPI Payment QR Code"
-                          className="w-24 h-24 sm:w-28 sm:h-28 mx-auto object-contain"
-                        />
-                        <span className="text-[10px] font-mono text-slate-500 block mt-1 font-semibold">
-                          UPI Pay ₹{totalPayableInr}
-                        </span>
-                      </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod('UPI_INSTANT')}
+                        className={`min-h-[46px] p-3 rounded-xl border text-left transition-all ${
+                          paymentMethod === 'UPI_INSTANT'
+                            ? 'bg-emerald-50 border-emerald-600 ring-2 ring-emerald-500/20'
+                            : 'bg-white border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="text-xs font-bold text-[#0F172A]">
+                          ⚡ Instant UPI Escrow Pay
+                        </div>
+                        <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                          {merchantUpiVpa} / {secondaryUpiVpa}
+                        </div>
+                      </button>
 
-                      <div className="space-y-2 text-xs w-full">
-                        <span className="font-semibold text-slate-800 block">
-                          Pay with 1-Click UPI Intent or Scan QR:
-                        </span>
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod('COD_ON_PICKUP')}
+                        className={`min-h-[46px] p-3 rounded-xl border text-left transition-all ${
+                          paymentMethod === 'COD_ON_PICKUP'
+                            ? 'bg-emerald-50 border-emerald-600 ring-2 ring-emerald-500/20'
+                            : 'bg-white border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="text-xs font-bold text-[#0F172A]">
+                          🛵 Cash / UPI on Pickup (COD)
+                        </div>
+                        <div className="text-[10px] text-slate-500 mt-0.5">
+                          Pay rider or counter after multimeter check
+                        </div>
+                      </button>
+                    </div>
 
-                        {/* 1-Click Launch Buttons for GPay, PhonePe, Paytm */}
-                        <div className="grid grid-cols-3 gap-1.5">
-                          <a
-                            href={upiDeepLink}
-                            className="min-h-[38px] px-2 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] flex items-center justify-center text-center active:scale-95 transition-all shadow-xs"
-                          >
-                            Google Pay
-                          </a>
-                          <a
-                            href={upiDeepLink}
-                            className="min-h-[38px] px-2 py-1.5 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-[11px] flex items-center justify-center text-center active:scale-95 transition-all shadow-xs"
-                          >
-                            PhonePe
-                          </a>
-                          <a
-                            href={upiDeepLink}
-                            className="min-h-[38px] px-2 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-[11px] flex items-center justify-center text-center active:scale-95 transition-all shadow-xs"
-                          >
-                            Paytm
-                          </a>
+                    {paymentMethod === 'UPI_INSTANT' ? (
+                      <div className="flex flex-col sm:flex-row items-center gap-4 bg-white p-3.5 rounded-xl border border-slate-200">
+                        <div className="p-2 bg-white rounded-lg border border-slate-200 shrink-0 text-center">
+                          <img
+                            src={qrCodeUrl}
+                            alt="UPI Payment QR Code"
+                            className="w-24 h-24 sm:w-28 sm:h-28 mx-auto object-contain"
+                          />
+                          <span className="text-[10px] font-mono text-slate-500 block mt-1 font-semibold">
+                            UPI Pay ₹{totalPayableInr}
+                          </span>
                         </div>
 
-                        <div className="flex items-center justify-between gap-2 font-mono text-[11px] text-slate-700 bg-slate-50 p-2 rounded-xl border border-slate-200">
-                          <span className="truncate">VPA: {merchantUpiVpa}</span>
-                          <button
-                            type="button"
-                            onClick={handleCopyVpa}
-                            className="shrink-0 px-2 py-0.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-semibold active:scale-95 transition-all"
-                          >
-                            {copiedVpa ? '✓ Copied' : 'Copy'}
-                          </button>
-                        </div>
+                        <div className="space-y-2 text-xs w-full">
+                          <span className="font-semibold text-slate-800 block">
+                            Pay with 1-Click UPI Intent or Scan QR:
+                          </span>
 
-                        <div className="space-y-1">
-                          <div className="flex justify-between items-center">
-                            <label className="text-[11px] font-medium text-slate-700">
-                              12-Digit UPI UTR Reference *
-                            </label>
+                          {/* 1-Click Launch Buttons for GPay, PhonePe, Paytm */}
+                          <div className="grid grid-cols-3 gap-1.5">
+                            <a
+                              href={upiDeepLink}
+                              className="min-h-[38px] px-2 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] flex items-center justify-center text-center active:scale-95 transition-all shadow-xs"
+                            >
+                              Google Pay
+                            </a>
+                            <a
+                              href={upiDeepLink}
+                              className="min-h-[38px] px-2 py-1.5 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-[11px] flex items-center justify-center text-center active:scale-95 transition-all shadow-xs"
+                            >
+                              PhonePe
+                            </a>
+                            <a
+                              href={upiDeepLink}
+                              className="min-h-[38px] px-2 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-[11px] flex items-center justify-center text-center active:scale-95 transition-all shadow-xs"
+                            >
+                              Paytm
+                            </a>
+                          </div>
+
+                          <div className="flex items-center justify-between gap-2 font-mono text-[11px] text-slate-700 bg-slate-50 p-2 rounded-xl border border-slate-200">
+                            <span className="truncate">
+                              VPA: {merchantUpiVpa} ({secondaryUpiVpa})
+                            </span>
                             <button
                               type="button"
-                              onClick={() => setUpiUtrInput('428192849182')}
-                              className="text-[10px] font-bold text-emerald-700 hover:underline"
+                              onClick={handleCopyVpa}
+                              className="shrink-0 px-2 py-0.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-semibold active:scale-95 transition-all"
                             >
-                              Auto-Fill Test UTR
+                              {copiedVpa ? '✓ Copied' : 'Copy'}
                             </button>
                           </div>
-                          <input
-                            type="text"
-                            required
-                            maxLength={12}
-                            value={upiUtrInput}
-                            onChange={(e) => setUpiUtrInput(e.target.value.replace(/\D/g, ''))}
-                            placeholder="e.g. 428192849182"
-                            className="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-mono text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                          />
+
+                          <div className="space-y-1">
+                            <div className="flex justify-between items-center">
+                              <label className="text-[11px] font-medium text-slate-700">
+                                12-Digit UPI UTR Reference *
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => setUpiUtrInput('428192849182')}
+                                className="text-[10px] font-bold text-emerald-700 hover:underline"
+                              >
+                                Auto-Fill Test UTR
+                              </button>
+                            </div>
+                            <input
+                              type="text"
+                              required={paymentMethod === 'UPI_INSTANT'}
+                              maxLength={12}
+                              value={upiUtrInput}
+                              onChange={(e) => setUpiUtrInput(e.target.value.replace(/\D/g, ''))}
+                              placeholder="e.g. 428192849182"
+                              className="w-full min-h-[44px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-mono text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                            />
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="p-3.5 rounded-xl bg-emerald-50/80 border border-emerald-200 text-xs text-emerald-900 space-y-1">
+                        <div className="font-bold">
+                          ✓ Cash / UPI on Pickup (COD) Selected — ₹{totalPayableInr} Payable on Delivery
+                        </div>
+                        <p className="text-[11px] text-emerald-800">
+                          Your component or raw donor board will be reserved immediately. Pay ₹{totalPayableInr} via Cash or UPI ({merchantUpiVpa}) upon parcel handoff.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
 

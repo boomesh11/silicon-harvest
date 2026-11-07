@@ -59,18 +59,30 @@ import {
   restoreSupabaseAuthSession,
   supabaseUpdateProfile,
 } from '../services/harvestApi';
+import {
+  bootstrapSupabaseIfEmpty,
+  syncCreateBoardBackend,
+  syncCreateOrderBackend,
+  syncCreateBargainBackend,
+  syncUpdateBargainStatusBackend,
+  syncAdminOrderUpdateBackend,
+  syncAdminBoardPriceBackend,
+  syncAdminDeleteBoardBackend,
+  syncCreateSupportTicketBackend,
+  syncUserAccountBackend,
+} from '../services/backendApi';
 
 /** Persisted signed-in customer session (restored on reload). */
 const USER_SESSION_KEY = 'silicon_harvest_user_session';
 
 const STORAGE_KEYS = {
-  BOARDS: 'silicon_harvest_prod_v2_boards',
-  COMPONENTS: 'silicon_harvest_prod_v2_components',
-  ORDERS: 'silicon_harvest_prod_v2_orders',
-  USER: 'silicon_harvest_prod_v2_user',
-  TICKETS: 'silicon_harvest_prod_v2_tickets',
-  BARGAINS: 'silicon_harvest_prod_v2_bargains',
-  PRO_OVERRIDES: 'silicon_harvest_prod_v2_pro_overrides',
+  BOARDS: 'silicon_harvest_prod_v3_boards',
+  COMPONENTS: 'silicon_harvest_prod_v3_components',
+  ORDERS: 'silicon_harvest_prod_v3_orders',
+  USER: 'silicon_harvest_prod_v3_user',
+  TICKETS: 'silicon_harvest_prod_v3_tickets',
+  BARGAINS: 'silicon_harvest_prod_v3_bargains',
+  PRO_OVERRIDES: 'silicon_harvest_prod_v3_pro_overrides',
 };
 
 const LEGACY_KEYS_TO_PURGE = [
@@ -84,6 +96,7 @@ const LEGACY_KEYS_TO_PURGE = [
   'silicon_harvest_prod_v1_components',
   'silicon_harvest_prod_v1_orders',
   'silicon_harvest_prod_v1_user',
+  'silicon_harvest_prod_v2_boards',
 ];
 
 const BROADCAST_CHANNEL_NAME = 'silicon_harvest_prod_v2_realtime_bus';
@@ -476,37 +489,46 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     };
   }, []);
 
-  // Sync from Supabase on mount (never overwrite local catalog with empty arrays if cloud table is unseeded)
+  // Sync from Supabase / Backend API on mount with automatic Cloud Bootstrapper
   const refreshFromSupabase = useCallback(async () => {
-    const client = getSupabaseClient();
-    if (!client) {
-      setConnectionMode('LOCAL_FALLBACK');
-      return;
-    }
-
     try {
       setIsSyncing(true);
-      const [snapshot, tickets] = await Promise.all([
-        fetchSupabaseDataset(),
-        supabaseFetchSupportTickets(),
-      ]);
+      const cloudState = await bootstrapSupabaseIfEmpty();
 
-      if (snapshot) {
-        if (snapshot.boards.length > 0) {
-          setBoards(snapshot.boards);
-        }
-        if (snapshot.components.length > 0) {
-          setComponents(snapshot.components);
-        }
-        if (snapshot.orders.length > 0) {
-          setOrders(snapshot.orders);
+      if (cloudState.donorBoards.length > 0) {
+        setBoards(cloudState.donorBoards);
+      }
+      if (cloudState.components.length > 0) {
+        setComponents(cloudState.components);
+      }
+      if (cloudState.orders.length > 0) {
+        setOrders(cloudState.orders);
+      }
+      if (cloudState.bargains.length > 0) {
+        setBargainOffers(cloudState.bargains);
+      }
+
+      const client = getSupabaseClient();
+      if (client) {
+        const [snapshot, tickets] = await Promise.all([
+          fetchSupabaseDataset(),
+          supabaseFetchSupportTickets(),
+        ]);
+        if (snapshot) {
+          if (snapshot.boards.length > 0) setBoards(snapshot.boards);
+          if (snapshot.components.length > 0) setComponents(snapshot.components);
+          if (snapshot.orders.length > 0) setOrders(snapshot.orders);
         }
         if (tickets.length > 0) {
           setSupportTickets(tickets);
         }
         setConnectionMode('SUPABASE_CLOUD');
-        setLastSyncError(null);
+      } else {
+        setConnectionMode(
+          cloudState.source === 'SERVERLESS_API' ? 'SUPABASE_CLOUD' : 'LOCAL_FALLBACK'
+        );
       }
+      setLastSyncError(null);
     } catch (err: any) {
       setLastSyncError(err?.message || 'Failed to sync with Supabase');
     } finally {
@@ -820,6 +842,8 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     setOrders((prev) => [newOrder, ...prev]);
     broadcastLocalStateUpdate();
 
+    syncCreateOrderBackend(newOrder).catch(() => undefined);
+
     // If connected to Supabase Cloud, invoke the PostgreSQL Atomic RPC `place_salvage_order`
     if (connectionMode === 'SUPABASE_CLOUD') {
       supabasePlaceSalvageOrder({
@@ -940,6 +964,8 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     setComponents((prev) => [...newChildComponents, ...prev]);
     broadcastLocalStateUpdate();
 
+    syncCreateBoardBackend(newBoard, newChildComponents).catch(() => undefined);
+
     if (connectionMode === 'SUPABASE_CLOUD') {
       supabasePublishDonorBoard({
         ...input,
@@ -972,14 +998,19 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     };
     setBargainOffers((prev) => [newOffer, ...prev]);
     broadcastLocalStateUpdate();
+    syncCreateBargainBackend(newOffer).catch(() => undefined);
     return newOffer;
   };
 
   const acceptBargainOffer = (offerId: string) => {
+    const targetOffer = bargainOffers.find((o) => o.id === offerId);
     setBargainOffers((prev) =>
       prev.map((o) => (o.id === offerId ? { ...o, status: 'ACCEPTED' } : o))
     );
     broadcastLocalStateUpdate();
+    syncUpdateBargainStatusBackend(offerId, 'ACCEPTED', targetOffer?.offeredPriceInr).catch(
+      () => undefined
+    );
   };
 
   const rejectBargainOffer = (offerId: string) => {
@@ -987,6 +1018,7 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       prev.map((o) => (o.id === offerId ? { ...o, status: 'REJECTED' } : o))
     );
     broadcastLocalStateUpdate();
+    syncUpdateBargainStatusBackend(offerId, 'REJECTED').catch(() => undefined);
   };
 
   const upgradeToProMembership = (plan: 'monthly' | 'yearly') => {
@@ -1042,11 +1074,11 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   const switchOwnerAdmin = () => {
     const ownerUser: UserProfile = {
       id: 'USR-OWNER-ADMIN-01',
-      email: 'founder@siliconharvest.org',
-      fullName: 'Vikram Sundaram (Founder & Admin)',
+      email: 'rkboomesh@gmail.com',
+      fullName: 'Boomesh R K (Founder & Admin)',
       role: 'OWNER_ADMIN',
       organization: 'SiliconHarvest Headquarters',
-      phone: '+91 98400 99999',
+      phone: '+91 7200255069',
       defaultAddress: 'SiliconHarvest Hub, Guindy Industrial Estate, Chennai 600025',
       state: 'Tamil Nadu',
       district: 'Chennai',
@@ -1065,6 +1097,7 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     } catch {
       // ignore
     }
+    syncUserAccountBackend(ownerUser).catch(() => undefined);
     setActiveTab('OWNER_ADMIN');
     broadcastLocalStateUpdate();
   };
@@ -1108,6 +1141,7 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     });
 
     broadcastLocalStateUpdate();
+    syncAdminBoardPriceBackend(boardId, clampedPrice).catch(() => undefined);
   };
 
   const toggleBoardVerified = (boardId: string) => {
@@ -1121,6 +1155,7 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     setBoards((prev) => prev.filter((b) => b.id !== boardId));
     setComponents((prev) => prev.filter((c) => c.donorBoardId !== boardId));
     broadcastLocalStateUpdate();
+    syncAdminDeleteBoardBackend(boardId).catch(() => undefined);
   };
 
   const updateOrderStatusAdmin = (orderId: string, newStatus: OrderStatus) => {
@@ -1128,6 +1163,7 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
       prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
     );
     broadcastLocalStateUpdate();
+    syncAdminOrderUpdateBackend(orderId, newStatus).catch(() => undefined);
   };
 
   const resolveSupportTicket = (ticketId: string) => {
@@ -1223,6 +1259,17 @@ export const HarvestStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     const newTicket = await supabaseCreateSupportTicket(ticket);
     setSupportTickets((prev) => [newTicket, ...prev]);
     broadcastLocalStateUpdate();
+    syncCreateSupportTicketBackend({
+      id: newTicket.id,
+      senderName: newTicket.customerName,
+      senderEmail: newTicket.customerEmail || 'rkboomesh@gmail.com',
+      senderPhone: newTicket.customerPhone,
+      category: newTicket.category,
+      orderCode: newTicket.orderCode,
+      message: newTicket.message,
+      status: 'OPEN',
+      createdAt: newTicket.createdAt,
+    }).catch(() => undefined);
     return newTicket;
   };
 

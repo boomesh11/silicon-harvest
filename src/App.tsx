@@ -13,6 +13,7 @@ import { SupportContactPortal } from './components/SupportContactPortal';
 import { LoginPage } from './components/LoginPage';
 import { MembershipPortal } from './components/MembershipPortal';
 import { OwnerAdminPortal } from './components/OwnerAdminPortal';
+import { FounderVaultModal } from './components/FounderVaultModal';
 import { Leaf, ShieldCheck, Layers, HelpCircle, Truck } from 'lucide-react';
 
 const MainShell: React.FC = () => {
@@ -29,7 +30,7 @@ const MainShell: React.FC = () => {
 
       <Header />
 
-      <main className="relative flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-20 sm:pt-28 pb-16 sm:pb-20">
+      <main className="relative flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-10 pb-16 sm:pb-20">
         {activeTab === 'LOGIN' && <LoginPage />}
         {activeTab === 'MARKETPLACE' && <MarketplacePortal />}
         {activeTab === 'SELLER_PORTAL' && <SellerPortal />}
@@ -41,8 +42,11 @@ const MainShell: React.FC = () => {
         {activeTab === 'SUPPORT_CONTACT' && <SupportContactPortal />}
       </main>
 
+      {/* Corner Founder Vault Shield Icon (Boomesh@21 / rkboomesh@2006) */}
+      <FounderVaultModal />
+
       <footer className="relative border-t border-slate-200/80 bg-white/80 backdrop-blur-xl py-6 sm:py-8">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-500 text-center sm:text-left">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-500 text-center sm:text-left">
           <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5">
             <div className="w-6 h-6 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center shrink-0">
               <Leaf className="w-3.5 h-3.5 text-emerald-600" />
@@ -50,7 +54,7 @@ const MainShell: React.FC = () => {
             <span className="text-[#1D1D1F] font-semibold tracking-tight">
               SiliconHarvest
             </span>
-            <span>• Managed Semiconductor Recovery &amp; Supply</span>
+            <span>• Founder: Boomesh R K (rkboomesh@gmail.com • +91 7200255069)</span>
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 text-xs">
